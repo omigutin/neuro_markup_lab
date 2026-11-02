@@ -1,0 +1,193 @@
+/* NeuroMarkupLab: страница списка видео и редактор разметки. */
+:root {
+  --nml-bg: #f4f5f7; --nml-panel: #fff; --nml-text: #1c1e21; --nml-muted: #6b7280;
+  --nml-border: #e2e4e8; --nml-border-strong: #cdd2da; --nml-accent: #4f6228; --nml-accent-soft: #f1f4ec;
+  --nml-warn: #b8860b; --nml-error: #b3261e; --nml-select: #ffc400; --nml-shape: #7ea33a;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: var(--nml-bg); color: var(--nml-text); font-size: 13px; }
+.hidden { display: none !important; }
+.muted { color: var(--nml-muted); }
+.nml-page { max-width: 1600px; margin: 16px auto; padding: 0 20px; }
+
+/* ---- кнопки и поля */
+.nml-btn { border-radius: 8px; padding: 7px 13px; font-size: 13px; cursor: pointer; border: 1px solid var(--nml-border-strong);
+  background: #fff; color: var(--nml-text); white-space: nowrap; }
+.nml-btn:hover { background: #eef1f5; }
+.nml-btn[disabled] { opacity: .5; cursor: not-allowed; }
+.nml-btn-primary { background: var(--nml-accent); border-color: var(--nml-accent); color: #fff; }
+.nml-btn-primary:hover { background: #435323; }
+.nml-btn-sm { padding: 3px 9px; font-size: 12px; border-radius: 6px; }
+.nml-btn-danger { color: var(--nml-error); }
+.nml-input { border: 1px solid var(--nml-border-strong); border-radius: 8px; padding: 7px 10px; font-size: 13px; width: 100%; min-width: 0; background: #fff; }
+.nml-input:focus { outline: none; border-color: var(--nml-accent); }
+.nml-input.invalid { border-color: var(--nml-error); background: #fdf3f2; }
+
+/* ---- панель каталогов */
+.nml-panel { background: var(--nml-panel); border: 1px solid var(--nml-border); border-radius: 12px; padding: 14px 16px; }
+.nml-toolbar { display: grid; grid-template-columns: 1fr 1fr 220px; gap: 18px; align-items: start; }
+.nml-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.nml-label { font-weight: 600; font-size: 12px; color: #374151; }
+.nml-row { display: flex; gap: 6px; }
+.nml-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+.nml-check input { accent-color: var(--nml-accent); margin: 0; }
+.nml-hint { font-size: 11px; }
+.nml-status { margin: 12px 2px 8px; font-size: 12px; color: var(--nml-muted); min-height: 16px; }
+.nml-status .nml-error-text { color: var(--nml-error); }
+.nml-status .nml-warn-text { color: var(--nml-warn); }
+
+/* ---- список видео */
+.nml-list { display: flex; flex-direction: column; gap: 6px; }
+.nml-group-h { margin: 10px 2px 2px; font-weight: 600; font-size: 12px; color: #374151; }
+.nml-video { background: var(--nml-panel); border: 1px solid var(--nml-border); border-radius: 10px; }
+.nml-video-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; user-select: none; }
+.nml-video-head:hover { background: #f8f9fa; border-radius: 10px; }
+.nml-caret { width: 12px; color: var(--nml-muted); transition: transform .12s; flex: 0 0 auto; }
+.nml-video.open .nml-caret { transform: rotate(90deg); }
+.nml-video-name { font-weight: 600; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nml-video-cam { color: var(--nml-muted); font-size: 12px; flex: 0 0 auto; }
+.nml-badge { font-size: 11px; border-radius: 10px; padding: 2px 8px; border: 1px solid var(--nml-border); color: var(--nml-muted); flex: 0 0 auto; }
+.nml-badge.on { border-color: #c7d4b0; background: var(--nml-accent-soft); color: var(--nml-accent); }
+.nml-video-body { padding: 0 12px 12px 34px; display: flex; flex-direction: column; gap: 8px; }
+.nml-links { display: flex; flex-wrap: wrap; gap: 4px 24px; font-size: 12px; }
+.nml-links span.muted { margin-right: 6px; }
+.nml-link { color: #1d4ed8; text-decoration: none; word-break: break-all; cursor: pointer; }
+.nml-link:hover { text-decoration: underline; }
+/* Кадр — на ширину карточки, но не крупнее 960 px, чтобы список оставался обозримым */
+.nml-preview { position: relative; width: 100%; max-width: 960px; background: #0f1216; border-radius: 8px; overflow: hidden; line-height: 0; }
+.nml-preview img { width: 100%; display: block; }
+.nml-preview-ph { color: #9ca3af; line-height: 1.4; padding: 40px 16px; text-align: center; }
+.nml-preview-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.nml-preview-shape { fill: rgba(126,163,58,.14); stroke: var(--nml-shape); stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.nml-video-info { display: flex; flex-direction: column; gap: 8px; min-width: 0; font-size: 12px; }
+.nml-kv { display: flex; gap: 8px; }
+.nml-kv span { color: var(--nml-muted); min-width: 90px; }
+.nml-path { word-break: break-all; }
+
+/* ---- кнопка редактирования поверх кадра (в стиле переключателя) */
+.nml-preview-edit { position: absolute; top: 8px; right: 8px; z-index: 3; border: 1px solid rgba(255,255,255,.22);
+  background: rgba(15,18,22,.45); backdrop-filter: blur(2px); color: #fff; border-radius: 8px; padding: 5px 11px;
+  font-size: 15px; line-height: 1; cursor: pointer; }
+.nml-preview-edit:hover:not([disabled]) { background: rgba(255,255,255,.88); color: #111827; }
+.nml-preview-edit[disabled] { color: rgba(255,255,255,.35); cursor: not-allowed; }
+
+/* ---- переключатель варианта поверх кадра */
+.nml-variant-switch { position: absolute; top: 8px; left: 8px; z-index: 3; display: inline-flex; line-height: 1;
+  background: rgba(15,18,22,.45); backdrop-filter: blur(2px); border: 1px solid rgba(255,255,255,.22); border-radius: 8px; padding: 2px; }
+.nml-variant-switch button { border: 0; background: transparent; color: rgba(255,255,255,.8); font-size: 12px; padding: 5px 10px; border-radius: 6px; cursor: pointer; }
+.nml-variant-switch button:hover:not([disabled]) { background: rgba(255,255,255,.15); color: #fff; }
+.nml-variant-switch button.active { background: rgba(255,255,255,.88); color: #111827; font-weight: 600; }
+.nml-variant-switch button[disabled] { color: rgba(255,255,255,.35); cursor: not-allowed; }
+
+/* ---- модальное окно редактора */
+.nml-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 50; }
+.nml-modal { position: fixed; z-index: 51; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff;
+  border: 1px solid var(--nml-border); border-radius: 12px; box-shadow: 0 16px 48px rgba(0,0,0,.22); display: flex; flex-direction: column; }
+.nml-editor { width: 97vw; max-width: 1600px; height: 92vh; }
+.nml-modal-head { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--nml-border); }
+.nml-editor-titles { flex: 1 1 auto; min-width: 0; }
+.nml-modal-title { margin: 0; font-size: 16px; }
+.nml-editor-source { font-size: 13px; margin-top: 3px; color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nml-editor-source b { color: var(--nml-accent); }
+.nml-editor-source .muted { margin-left: 6px; }
+.nml-editor-video { font-size: 13px; font-weight: 600; color: #374151; max-width: 35%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nml-modal-x { border: 0; background: transparent; font-size: 20px; cursor: pointer; color: var(--nml-muted); line-height: 1; }
+.nml-modal-x:hover { color: var(--nml-error); }
+.nml-editor-body { flex: 1 1 auto; display: flex; gap: 12px; padding: 12px 16px; min-height: 0; }
+.nml-editor-stage { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
+.nml-editor-canvas { flex: 1 1 auto; background: #0f1216; border: 1px solid var(--nml-border); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; overflow: hidden; color: #9ca3af; }
+.nml-modal-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--nml-border); }
+.nml-save-box { display: flex; align-items: center; gap: 8px; }
+
+/* ---- сцена */
+.nml-svg { width: 100%; height: 100%; display: block; touch-action: none; }
+.nml-shape { cursor: move; }
+.nml-geom { fill: rgba(126,163,58,.10); stroke: var(--nml-shape); stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.nml-shape:hover .nml-geom { fill: rgba(126,163,58,.2); }
+.nml-shape.selected .nml-geom { fill: rgba(255,196,0,.18); stroke: var(--nml-select); stroke-width: 3px; }
+.nml-shape.hidden-shape { display: none; }
+.nml-handle { fill: #fff; stroke: var(--nml-select); stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.nml-handle:hover, .nml-handle.active { fill: var(--nml-select); }
+.nml-edge { stroke: transparent; fill: none; pointer-events: stroke; }
+.nml-edge:hover { stroke: rgba(255,196,0,.35); }
+.nml-svg.dragging * { cursor: inherit !important; }
+
+/* ---- правая панель */
+.nml-editor-side { flex: 0 0 440px; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; padding-right: 4px; font-size: 13px; }
+.nml-docinfo { font-size: 11px; }
+.nml-side-sec { display: flex; flex-direction: column; gap: 4px; }
+.nml-side-h { font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: .04em; color: #374151; cursor: default; }
+details > summary.nml-side-h { cursor: pointer; }
+.nml-sub { font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; color: var(--nml-muted); margin-top: 8px; }
+.nml-shapes { display: flex; flex-direction: column; gap: 3px; max-height: 240px; overflow-y: auto; }
+.nml-item { display: flex; align-items: flex-start; gap: 8px; border: 1px solid var(--nml-border); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
+.nml-item:hover { border-color: var(--nml-border-strong); background: #f6f7f9; }
+.nml-item.active { border-color: var(--nml-accent); background: var(--nml-accent-soft); }
+.nml-item.is-hidden .nml-item-main { opacity: .5; }
+.nml-item input { margin: 1px 0 0; accent-color: var(--nml-accent); cursor: pointer; }
+.nml-item-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.nml-item-label { font-weight: 600; }
+.nml-item-meta { font-size: 11px; color: var(--nml-muted); }
+.nml-changed { color: var(--nml-warn); }
+.nml-selected { border-top: 1px solid #eef0f3; padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.nml-sel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.nml-sel-title { font-weight: 600; font-size: 15px; }
+.nml-sel-type { font-weight: 400; font-size: 12px; display: block; margin-top: 2px; }
+.nml-sel-actions { display: flex; gap: 4px; flex: 0 0 auto; }
+.nml-sel-actions .nml-btn[disabled]:hover { background: #fff; }
+
+/* ---- атрибуты: колонки фиксированной ширины — Поле | Тип | Значение | null | × */
+.nml-attrs { display: flex; flex-direction: column; gap: 4px; }
+.nml-attr { display: grid; grid-template-columns: 112px 88px minmax(0, 1fr) 44px 18px; gap: 6px; align-items: center; min-height: 28px; }
+.nml-attr-head { min-height: 0; font-size: 11px; color: var(--nml-muted); }
+.nml-attr-name { font-family: Consolas, monospace; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
+.nml-attr-name.known { font-weight: 600; }
+.nml-attr-type { font-size: 12px; color: var(--nml-muted); font-family: Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nml-attr-value { display: flex; align-items: center; min-width: 0; }
+.nml-attr-value .nml-input { width: 100%; }
+.nml-attr-value input[type=checkbox] { margin: 0; accent-color: var(--nml-accent); width: 16px; height: 16px; }
+.nml-attr-null { font-size: 11px; padding: 3px 0; width: 44px; border-radius: 6px; }
+.nml-attr-null.on { background: #eef1f5; font-weight: 600; }
+.nml-attr-del { border: 0; background: transparent; color: var(--nml-muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 0; }
+.nml-attr-del:hover { color: var(--nml-error); }
+.nml-attr.mismatch .nml-attr-type { color: var(--nml-warn); font-weight: 600; }
+.nml-attr.mismatch .nml-input { border-color: var(--nml-warn); }
+.nml-attr-ro { font-family: Consolas, monospace; color: var(--nml-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nml-input-sm { padding: 4px 7px; font-size: 13px; border-radius: 6px; }
+.nml-mono { font-family: Consolas, monospace; }
+.nml-add-select { margin-top: 4px; color: #374151; }
+.nml-form { display: flex; flex-direction: column; gap: 10px; }
+.nml-form-row { display: grid; grid-template-columns: 60px 1fr; gap: 8px; align-items: center; }
+.nml-dialog-error { color: var(--nml-error); font-size: 12px; padding: 0 16px; min-height: 16px; }
+
+/* ---- типы и поля документа */
+.nml-types { border: 1px solid #f0d9a8; background: #fffaf0; border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.nml-types.has-problems { border-color: #f1c3bf; background: #fdf3f2; }
+.nml-types-row { cursor: pointer; }
+.nml-types-row:hover { text-decoration: underline; }
+.nml-types-problem { color: var(--nml-error); }
+.nml-docfield { display: grid; grid-template-columns: minmax(0, 1fr) 88px auto auto; gap: 6px; align-items: center; margin-top: 4px; }
+.nml-coords { display: grid; grid-template-columns: 28px 1fr 1fr; gap: 4px 8px; align-items: center; font-variant-numeric: tabular-nums; }
+.nml-coords label { display: flex; align-items: center; gap: 6px; color: var(--nml-muted); }
+.nml-coords .nml-input { width: 100%; }
+
+/* ---- диалог и сообщения */
+.nml-dialog { position: absolute; inset: 0; z-index: 5; background: rgba(0,0,0,.25); display: flex; align-items: center; justify-content: center; border-radius: 12px; }
+.nml-dialog-box { background: #fff; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.25); width: 560px; max-width: 92%; max-height: 80%; display: flex; flex-direction: column; }
+.nml-dialog-title { font-weight: 600; font-size: 15px; padding: 14px 16px 6px; }
+.nml-dialog-body { padding: 4px 16px 10px; overflow-y: auto; font-size: 13px; line-height: 1.45; }
+.nml-dialog-body ul { margin: 6px 0; padding-left: 18px; }
+.nml-dialog-body code { font-family: Consolas, monospace; background: #f3f4f6; padding: 0 3px; border-radius: 3px; }
+.nml-dialog-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--nml-border); }
+.nml-msg { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #1f2937; color: #fff; font-size: 13px;
+  padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 90; max-width: 80vw; }
+.nml-msg.show { opacity: 1; }
+.nml-msg.error { background: var(--nml-error); }
+
+@media (max-width: 1100px) {
+  .nml-toolbar { grid-template-columns: 1fr; }
+  .nml-video-body { flex-direction: column; padding-left: 12px; }
+  .nml-editor-body { flex-direction: column; }
+  .nml-editor-side { flex: 0 0 auto; max-height: 45%; }
+}

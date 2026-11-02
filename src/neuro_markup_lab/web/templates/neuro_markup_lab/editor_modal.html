@@ -1,0 +1,62 @@
+{# Редактор разметки: кадр и фигуры в одном <svg> (одна система координат), справа панель
+   фигур и атрибутов, внизу кнопки сохранения. Наполнение — neuro_markup_lab_editor.js.
+   Блоки панели не появляются и не исчезают при работе — вёрстка не съезжает. #}
+<div class="nml-overlay hidden" id="nml-editor-overlay"></div>
+<div class="nml-modal nml-editor hidden" id="nml-editor" role="dialog" aria-modal="true"
+     aria-labelledby="nml-editor-title" aria-hidden="true">
+  <div class="nml-modal-head">
+    <div class="nml-editor-titles">
+      <h2 class="nml-modal-title" id="nml-editor-title">Редактор разметки</h2>
+      <div class="nml-editor-source" id="nml-editor-source"></div>
+    </div>
+    <div class="nml-editor-video" id="nml-editor-video"></div>
+    <button type="button" class="nml-modal-x" id="nml-editor-x" title="Закрыть" aria-label="Закрыть">×</button>
+  </div>
+
+  <div class="nml-editor-body">
+    <div class="nml-editor-stage">
+      <div class="nml-editor-canvas" id="nml-editor-canvas"></div>
+      {# Переключатель «Боевая | Рядом с видео» поверх кадра #}
+      <div class="nml-variant-switch nml-variant-switch-editor" id="nml-editor-switch"></div>
+    </div>
+    <aside class="nml-editor-side" id="nml-editor-side">
+      <div class="nml-docinfo muted" id="nml-editor-docinfo"></div>
+      <div id="nml-editor-types"></div>
+      <div class="nml-side-sec">
+        <div class="nml-side-h">Объекты</div>
+        <div class="nml-shapes" id="nml-editor-shapes"></div>
+      </div>
+      <div class="nml-selected" id="nml-editor-selected"></div>
+      <div class="nml-side-sec nml-docfields">
+        <div class="nml-side-h">Поля документа</div>
+        <div id="nml-editor-docfields"></div>
+      </div>
+      <div class="nml-hint muted">
+        Фигуру — тянуть мышью или стрелками (Shift — на 10 px). Форму — за точки и стороны.
+        Двойной клик по стороне добавляет точку (прямоугольник станет полигоном), по точке
+        (или Delete) — удаляет. Галочка в списке — показывать фигуру (поле show).
+      </div>
+    </aside>
+  </div>
+
+  <div class="nml-modal-foot">
+    <button type="button" class="nml-btn" id="nml-editor-cancel">Отмена</button>
+    <div class="nml-save-box">
+      <button type="button" class="nml-btn" id="nml-save-production" data-save="production">Сохранить в боевой JSON</button>
+      <button type="button" class="nml-btn nml-btn-primary" id="nml-save-sidecar" data-save="sidecar">Сохранить рядом с видео</button>
+    </div>
+  </div>
+
+  {# Диалог подтверждения внутри редактора (приведение типов, перезапись боевого JSON) #}
+  <div class="nml-dialog hidden" id="nml-dialog" role="alertdialog" aria-modal="true">
+    <div class="nml-dialog-box">
+      <div class="nml-dialog-title" id="nml-dialog-title"></div>
+      <div class="nml-dialog-body" id="nml-dialog-body"></div>
+      <div class="nml-dialog-error" id="nml-dialog-error"></div>
+      <div class="nml-dialog-foot">
+        <button type="button" class="nml-btn" id="nml-dialog-cancel">Отмена</button>
+        <button type="button" class="nml-btn nml-btn-primary" id="nml-dialog-ok">OK</button>
+      </div>
+    </div>
+  </div>
+</div>

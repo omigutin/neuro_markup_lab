@@ -19,3 +19,10 @@ def test_import_without_web() -> None:
     env = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True, env=env)
     assert result.stdout.strip() == "False"
+
+
+def test_public_format_api() -> None:
+    """ Формат разметки доступен из корня пакета. """
+    shape = neuro_markup_lab.MarkupShape(label=neuro_markup_lab.ShapeLabel.CROP)
+    assert shape.position is neuro_markup_lab.ShapePosition.NONE
+    assert neuro_markup_lab.MarkupDocument(shapes=[shape]).shapes[0].label == 'crop'
