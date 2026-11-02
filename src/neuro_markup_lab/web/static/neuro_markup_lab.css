@@ -305,3 +305,4 @@ details > summary.nml-side-h { cursor: pointer; }
 .nml-vsel-n { font-weight: 700; }
 .nml-vsel-c { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nml-vsel-d { color: var(--nml-muted); white-space: nowrap; }
+.nml-vsel-empty { padding: 10px 8px; }

@@ -212,16 +212,24 @@ NML.frame = (function () {
       var list = versionsList();
       var old = box.querySelector('.nml-vsel-list');
       if (old) old.remove();
-      if (state.variant !== 'sidecar' || !list.length) return;
-      var current = outsideVersions() ? null : state.versions.current;
+      // Кнопка версии — всегда, когда показана разметка рядом с видео; версий нет — «без версий»
+      if (state.variant !== 'sidecar' || !(state.entry.sidecar || {}).exists) return;
+      var current = outsideVersions() || !list.length ? null : state.versions.current;
       var shown = list.filter(function (v) { return v.number === current; })[0];
-      var title = shown ? 'v' + shown.number + (shown.comment ? ' — ' + shown.comment : '') + '. Выбрать версию' : 'Файл изменён вне версий. Выбрать версию';
+      var label = shown ? 'v' + shown.number : list.length ? 'вне версий' : 'без версий';
+      var title = shown ? 'v' + shown.number + (shown.comment ? ' — ' + shown.comment : '') + '. Выбрать версию'
+        : list.length ? 'Файл изменён вне версий. Выбрать версию' : 'Версий нет: они появятся при сохранении в редакторе';
       switchHost.insertAdjacentHTML('beforeend', '<button type="button" class="nml-ver-seg" data-vsel data-vsel-toggle title="' + esc(title) + '">'
-        + (shown ? 'v' + shown.number : 'вне версий') + ' ▾</button>');
+        + label + ' ▾</button>');
       var seg = switchHost.querySelector('[data-vsel-toggle]');
       var prod = switchHost.querySelector('[data-variant="production"]');
       if (prod && prod.offsetWidth) seg.style.minWidth = prod.offsetWidth + 'px';
       if (!state.versionsOpen) return;
+      if (!list.length) {
+        box.insertAdjacentHTML('beforeend', '<div class="nml-vsel-list" data-vsel><div class="nml-vsel-empty muted">'
+          + 'Версий пока нет: первая появится при сохранении в редакторе.</div></div>');
+        return;
+      }
       box.insertAdjacentHTML('beforeend', '<div class="nml-vsel-list" data-vsel>' + list.map(function (v) {
         return '<div class="nml-vsel-row" data-version-pick="' + v.number + '" title="Сделать текущей">'
           + '<span class="nml-vsel-star' + (v.pinned ? ' on' : '') + '" title="' + (v.pinned ? 'В избранном' : '') + '">★</span>'

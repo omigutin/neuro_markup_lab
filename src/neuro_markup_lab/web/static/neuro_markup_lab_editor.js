@@ -702,12 +702,15 @@ NML.editor = (function () {
   function renderSwitch() {
     var host = el('nml-editor-switch');
     C.renderSwitch(host, ctx.entry, ctx.variant, switchVariant);
-    if (!doc || ctx.variant !== 'sidecar' || !doc.versions_count) return;
+    // Кнопка версии — всегда, когда открыта разметка рядом с видео; версий нет — «без версий»
+    if (!doc || ctx.variant !== 'sidecar') return;
     var n = doc.markup_version;
     var v = n != null ? versionByNumber(n) : null;
-    var title = n == null ? 'Файл изменён вне версий' : 'v' + n + (v && v.comment ? ' — ' + v.comment : '') + '. Выбрать версию';
+    var label = n != null ? 'v' + n : doc.versions_count ? 'вне версий' : 'без версий';
+    var title = n != null ? 'v' + n + (v && v.comment ? ' — ' + v.comment : '') + '. Выбрать версию'
+      : doc.versions_count ? 'Файл изменён вне версий' : 'Версий нет: первая появится при сохранении';
     host.insertAdjacentHTML('beforeend', '<button type="button" class="nml-ver-seg" data-ver-toggle title="' + esc(title) + '">'
-      + (n != null ? 'v' + n : 'вне версий') + ' ▾</button>');
+      + label + ' ▾</button>');
     var seg = host.querySelector('[data-ver-toggle]');
     seg.addEventListener('click', function (e) { e.stopPropagation(); toggleVersions(); });
     // Кнопка версии шириной как «Боевая»: переключатель симметричен
