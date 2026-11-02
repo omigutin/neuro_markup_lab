@@ -113,13 +113,13 @@
     listHost.innerHTML = html;
     visible.forEach(function (v) { if (v.open) renderBody(v); });
   }
-  // Бейдж варианта разметки: есть файл — «on», показан в кадре — «active»; клик показывает этот вариант
+  // Бейдж варианта разметки (свой цвет у каждого варианта): есть файл — «on», показан в кадре — «active»,
+  // нет файла — серый пунктир; клик показывает этот вариант
   function badge(v, variant, text) {
     var loc = v[variant] || {};
-    var cls = 'nml-badge' + (loc.exists ? ' on' : '') + (v.cardVariant === variant && loc.exists ? ' active' : '');
+    var cls = 'nml-badge nml-v-' + variant + (loc.exists ? ' on' : '') + (v.cardVariant === variant && loc.exists ? ' active' : '');
     var title = loc.exists ? loc.path : (loc.reason || 'Файла нет');
-    return '<span class="' + cls + '" data-badge="' + variant + '" title="' + esc(title) + '">'
-      + (loc.exists ? '✓ ' : '— ') + esc(text) + '</span>';
+    return '<span class="' + cls + '" data-badge="' + variant + '" title="' + esc(title) + '">' + esc(text) + '</span>';
   }
   function headHtml(v) {
     return '<div class="nml-video-head" data-toggle>'

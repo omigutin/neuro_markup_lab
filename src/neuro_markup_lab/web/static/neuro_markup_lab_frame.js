@@ -33,6 +33,10 @@ NML.frame = (function () {
   var COORD_DIGITS = 2;
   var COPY_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/>'
     + '<path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>';
+  var FOLDER_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true">'
+    + '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+  // Значение show, когда в фигуре его нет: фигура видна
+  var SHOW_DEFAULT_HINT = 'не задано в файле — по умолчанию видна';
 
   function defaultVariant(entry) {
     if (entry.sidecar && entry.sidecar.exists) return 'sidecar';
@@ -169,28 +173,29 @@ NML.frame = (function () {
     }
 
     // ---- панель
-    // Карточка файла разметки: клик по карточке показывает этот вариант; ссылка открывает файл
+    // Карточка файла разметки (цвет варианта): клик по карточке показывает этот вариант; ссылка открывает файл;
+    // у боевой справа — выбор другого файла
     function fileCard(variant) {
       var loc = state.entry[variant] || {};
       var active = variant === state.variant;
+      var copy = loc.exists
+        ? '<button type="button" class="nml-icon-btn" data-copy="' + esc(loc.path) + '" title="Копировать путь">' + COPY_ICON + '</button>' : '';
       var path = loc.exists
-        ? '<button type="button" class="nml-icon-btn" data-copy="' + esc(loc.path) + '" title="Копировать путь">' + COPY_ICON + '</button>'
-          + '<a href="#" class="nml-link" data-open-variant="' + variant + '" title="Открыть в программе по умолчанию">' + esc(loc.path) + '</a>'
+        ? '<a href="#" class="nml-link" data-open-variant="' + variant + '" title="Открыть в программе по умолчанию">' + esc(loc.path) + '</a>'
         : '<span class="muted">' + esc(loc.path ? 'нет файла ' + loc.name : (loc.reason || '—')) + '</span>';
-      var actions = '';
-      if (variant === 'production' && jsonsDir) {
-        actions = '<span class="nml-info-actions">'
-          + (loc.manual ? '<button type="button" class="nml-btn nml-btn-small" data-auto-production title="Вернуть подбор по каталогу">Подбирать автоматически</button>' : '')
-          + '<button type="button" class="nml-btn nml-btn-small" data-choose-production title="Указать другой файл боевой разметки для этого видео">Открыть файл…</button></span>';
-      }
+      var choose = variant === 'production' && jsonsDir
+        ? '<button type="button" class="nml-info-open" data-choose-production title="Открыть другой файл боевой разметки для этого видео…">' + FOLDER_ICON + '</button>' : '';
+      var auto = variant === 'production' && jsonsDir && loc.manual
+        ? '<button type="button" class="nml-btn nml-btn-small" data-auto-production title="Вернуть подбор по каталогу">Подбирать автоматически</button>' : '';
       var versionsRow = variant === 'sidecar' ? versionsHtml() : '';
       var selectable = loc.exists && !active;
-      return '<div class="nml-info-file' + (active ? ' active' : '') + (loc.exists ? '' : ' missing') + (selectable ? ' selectable' : '') + '"'
+      return '<div class="nml-info-file nml-v-' + variant + (active ? ' active' : '') + (loc.exists ? '' : ' missing') + (selectable ? ' selectable' : '') + '"'
         + (selectable ? ' data-select-variant="' + variant + '" title="Показать эту разметку"' : '') + '>'
-        + '<div class="nml-info-file-head"><b>' + esc(C.VARIANT_LABELS[variant]) + '</b>'
-        + (loc.manual ? '<span class="nml-tag">выбрана вручную</span>' : '')
+        + '<div class="nml-info-file-body">'
+        + '<div class="nml-info-file-head"><b>' + esc(C.VARIANT_LABELS[variant]) + '</b>' + copy
+        + (loc.manual ? '<span class="nml-tag">выбрана вручную</span>' : '') + auto
         + '</div>'
-        + '<div class="nml-info-row"><div class="nml-info-path">' + path + '</div>' + actions + '</div>' + versionsRow + '</div>';
+        + '<div class="nml-info-path">' + path + '</div>' + versionsRow + '</div>' + choose + '</div>';
     }
     function fmtTime(iso) {
       var d = new Date(iso);
@@ -232,6 +237,9 @@ NML.frame = (function () {
       var label = attrs.label == null || attrs.label === '' ? '(без метки)' : String(attrs.label);
       var points = s.points || [];
       var names = Object.keys(attrs).filter(function (k) { return k !== 'label' && !GEOMETRY_KEYS[k] && !(known[k] && known[k].hidden); });
+      // show выводится всегда: без него в файле фигура видна
+      var showMissing = !('show' in attrs) && !(known.show && known.show.hidden);
+      if (showMissing) names.push('show');
       var order = Object.keys(known);
       names.sort(function (a, b) {
         var ia = order.indexOf(a), ib = order.indexOf(b);
@@ -242,12 +250,15 @@ NML.frame = (function () {
       }).join('');
       var rows = names.map(function (k) {
         var title = known[k] && known[k].title ? ' title="' + esc(known[k].title + (known[k].hint ? ' — ' + known[k].hint : '')) + '"' : '';
-        return '<div class="nml-info-attr"><span' + title + '>' + esc(k) + '</span><div>' + valueHtml(attrs[k]) + '</div></div>';
+        var value = k === 'show' && showMissing
+          ? '<span class="nml-default" title="' + SHOW_DEFAULT_HINT + '">true</span>' : valueHtml(attrs[k]);
+        return '<div class="nml-info-attr"><span' + title + '>' + esc(k) + '</span><div>' + value + '</div></div>';
       }).join('');
-      var hidden = C.isVisible(attrs) ? '' : '<span class="nml-tag" title="show: false — не рисуется">скрыт</span>';
-      return '<div class="nml-obj" data-index="' + s.index + '">'
+      var hidden = !C.isVisible(attrs);
+      return '<div class="nml-obj' + (hidden ? ' nml-obj-hidden' : '') + '" data-index="' + s.index + '"'
+        + (hidden ? ' title="show: false — фигура не рисуется"' : '') + '>'
         + '<div class="nml-obj-head"><span class="nml-obj-n">#' + s.index + '</span><b>' + esc(label) + '</b>'
-        + '<span class="muted">' + esc(s.shape_type || '—') + ' · ' + points.length + ' ' + plural(points.length, 'точка', 'точки', 'точек') + '</span>' + hidden + '</div>'
+        + '<span class="muted">' + esc(s.shape_type || '—') + '</span></div>'
         + '<div class="nml-pts">' + (coords || '<span class="muted">точек нет</span>') + '</div>'
         + (rows ? '<div class="nml-info-attrs">' + rows + '</div>' : '')
         + '</div>';
@@ -277,7 +288,7 @@ NML.frame = (function () {
     function renderInfo() {
       info.innerHTML = '<section class="nml-info-sec"><div class="nml-info-h">Файлы разметки</div>'
         + '<div class="nml-info-files">' + VARIANTS.map(fileCard).join('') + '</div></section>'
-        + '<section class="nml-info-sec">' + contentHtml() + '</section>'
+        + '<section class="nml-info-sec nml-info-content">' + contentHtml() + '</section>'
         + '<div class="nml-info-foot"><button type="button" class="nml-btn" data-open-video title="Открыть видео в программе по умолчанию">Открыть видео</button>'
         + (o.editable ? '<button type="button" class="nml-btn nml-btn-primary" data-open-editor' + (state.variant ? '' : ' disabled') + ' title="Открыть редактор разметки">Открыть редактор</button>' : '')
         + '</div>';
@@ -379,6 +390,17 @@ NML.frame = (function () {
     host.addEventListener('change', onChange);
     if (info) { info.addEventListener('mouseover', onOver); info.addEventListener('mouseleave', function () { highlight(null); }); }
 
+    // Панель не выше кадра: объекты прокручиваются внутри, кнопки внизу всегда видны.
+    // Кадр и панель друг под другом (узкий экран) — высота панели не ограничивается.
+    var view = host.querySelector('.nml-frame-view');
+    function fitInfo() {
+      if (!info) return;
+      var column = getComputedStyle(host).flexDirection === 'column';
+      info.style.height = column || !view.offsetHeight ? '' : view.offsetHeight + 'px';
+    }
+    var resizeObserver = info && window.ResizeObserver ? new ResizeObserver(fitInfo) : null;
+    if (resizeObserver) resizeObserver.observe(view);
+
     function refresh() {
       return loadEntry().then(function () { loadVersions(); loadDoc(); }).catch(function (err) {
         state.entry = state.entry || { sidecar: {}, production: {} };
@@ -397,7 +419,11 @@ NML.frame = (function () {
     return {
       refresh: refresh,
       setVariant: setVariant,
-      destroy: function () { state.alive = false; host.removeEventListener('click', onClick); host.innerHTML = ''; host.classList.remove('nml-frame'); },
+      destroy: function () {
+        state.alive = false;
+        if (resizeObserver) resizeObserver.disconnect();
+        host.removeEventListener('click', onClick); host.innerHTML = ''; host.classList.remove('nml-frame');
+      },
       get variant() { return state.variant; },
       get entry() { return state.entry; },
       get productionKey() { return state.key; },

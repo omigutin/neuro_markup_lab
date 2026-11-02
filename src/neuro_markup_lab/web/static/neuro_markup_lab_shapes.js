@@ -101,7 +101,7 @@ NML.common = (function () {
     host.innerHTML = VARIANTS.map(function (v) {
       var loc = entry[v] || {};
       var title = loc.exists ? (loc.path || loc.name) : (loc.reason || 'Файла нет' + (loc.name ? ': ' + loc.name : ''));
-      return '<button type="button" data-variant="' + v + '"' + (v === active ? ' class="active"' : '')
+      return '<button type="button" data-variant="' + v + '" class="nml-v-' + v + (v === active ? ' active' : '') + '"'
         + (loc.exists ? '' : ' disabled') + ' title="' + esc(title) + '">' + esc(VARIANT_LABELS[v]) + '</button>';
     }).join('');
     host.onclick = function (e) {
