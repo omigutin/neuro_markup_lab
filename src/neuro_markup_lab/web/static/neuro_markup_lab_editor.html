@@ -6,23 +6,20 @@
      aria-labelledby="nml-editor-title" aria-hidden="true">
   <div class="nml-modal-head">
     <div class="nml-editor-titles">
+      <!-- Имя видео; под ним — открытая разметка и полный путь к её JSON -->
       <h2 class="nml-modal-title" id="nml-editor-title">Редактор разметки</h2>
       <div class="nml-editor-source" id="nml-editor-source"></div>
     </div>
-    <div class="nml-versions-box">
-      <button type="button" class="nml-btn nml-btn-small" id="nml-versions-btn" title="Версии разметки рядом с видео">Версии</button>
-      <!-- Список версий: клик по строке открывает версию; сравнение, «сделать текущей», закрепление -->
-      <div class="nml-versions hidden" id="nml-versions"></div>
-    </div>
-    <div class="nml-editor-video" id="nml-editor-video"></div>
     <button type="button" class="nml-modal-x" id="nml-editor-x" title="Закрыть" aria-label="Закрыть">×</button>
   </div>
 
   <div class="nml-editor-body">
     <div class="nml-editor-stage">
       <div class="nml-editor-canvas" id="nml-editor-canvas"></div>
-      <!-- Переключатель «Боевая | Рядом с видео» поверх кадра -->
+      <!-- Переключатель «Боевая | Рядом с видео | vN ▾» поверх кадра; vN — список версий рядом с видео:
+           щелчок по строке делает версию текущей, сравнение, закрепление -->
       <div class="nml-variant-switch nml-variant-switch-editor" id="nml-editor-switch"></div>
+      <div class="nml-versions hidden" id="nml-versions"></div>
     </div>
     <aside class="nml-editor-side" id="nml-editor-side">
       <div class="nml-docinfo muted" id="nml-editor-docinfo"></div>
@@ -47,9 +44,10 @@
   <div class="nml-modal-foot">
     <button type="button" class="nml-btn" id="nml-editor-cancel">Отмена</button>
     <div class="nml-save-box">
-      <button type="button" class="nml-btn" id="nml-save-production" data-save="production">Сохранить в боевой JSON</button>
-      <button type="button" class="nml-btn hidden" id="nml-save-overwrite" title="Перезаписать открытую версию разметки рядом с видео">Сохранить в версию</button>
-      <button type="button" class="nml-btn nml-btn-primary" id="nml-save-sidecar" data-save="sidecar" title="Новая версия разметки рядом с видео; она станет текущей">Сохранить как новую версию</button>
+      <button type="button" class="nml-btn nml-btn-production" id="nml-save-production" data-save="production">Сохранить в боевой JSON</button>
+      <button type="button" class="nml-btn" id="nml-save-sidecar" data-save="sidecar" title="Новая версия разметки рядом с видео; она станет текущей">Сохранить как новую версию</button>
+      <!-- В то, что открыто: версию рядом с видео — перезаписать, боевую — в боевой JSON -->
+      <button type="button" class="nml-btn nml-btn-primary" id="nml-save-current">Сохранить</button>
     </div>
   </div>
 

@@ -203,23 +203,34 @@ NML.frame = (function () {
       function two(n) { return (n < 10 ? '0' : '') + n; }
       return two(d.getDate()) + '.' + two(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + two(d.getHours()) + ':' + two(d.getMinutes());
     }
-    // Выбор версии разметки рядом с видео: выбранная сразу показывается на кадре
+    // Версия разметки рядом с видео: свой список (номер, комментарий, время, «текущая» отдельным столбцом).
+    // Выбранная версия сразу становится текущей — файл рядом с видео становится равен ей.
+    function versionRow(v, current) {
+      return '<span class="nml-vsel-n">v' + v.number + '</span>'
+        + '<span class="nml-vsel-c" title="' + esc(v.comment || '') + '">' + esc(v.comment || '') + '</span>'
+        + '<span class="nml-vsel-d">' + esc(fmtTime(v.updated)) + (v.pinned ? ' ★' : '') + '</span>'
+        + '<span class="nml-vsel-cur">' + (v.number === current ? 'текущая' : '') + '</span>';
+    }
     function versionsHtml() {
       var h = state.versions;
       if (!h || !(h.versions || []).length) return '';
       var list = h.versions.slice().reverse();
-      var options = '<option value="">файл рядом с видео' + (h.current != null ? ' (текущая v' + h.current + ')' : '') + '</option>'
-        + list.map(function (v) {
-          var text = 'v' + v.number + ' · ' + fmtTime(v.updated) + (v.pinned ? ' ★' : '') + (v.number === h.current ? ' · текущая' : '')
-            + (v.comment ? ' · ' + v.comment : '');
-          return '<option value="' + v.number + '"' + (state.version === v.number ? ' selected' : '') + '>' + esc(text) + '</option>';
-        }).join('');
-      var other = state.version != null && state.version !== h.current;
+      var current = h.current;
+      // Файл рядом с видео изменён вне версий: текущей версии ему нет
+      var outside = state.variant === 'sidecar' && state.doc && state.doc.markup_version == null;
+      var shown = outside ? null : list.filter(function (v) { return v.number === current; })[0];
+      var button = shown ? versionRow(shown, current)
+        : '<span class="nml-vsel-n">—</span><span class="nml-vsel-c">изменён вне версий</span><span></span><span></span>';
+      var rows = list.map(function (v) {
+        return '<div class="nml-vsel-row' + (v.number === current ? ' current' : '') + '" data-version-pick="' + v.number + '"'
+          + ' title="' + (v.number === current ? 'Текущая версия' : 'Сделать текущей: файл рядом с видео станет равен этой версии') + '">'
+          + versionRow(v, current) + '</div>';
+      }).join('');
       return '<div class="nml-info-versions"><span class="muted">Версия</span>'
-        + '<select class="nml-input nml-input-sm" data-version-select title="Показать версию на кадре">' + options + '</select>'
-        + '<span class="muted">' + list.length + ' ' + plural(list.length, 'версия', 'версии', 'версий') + '</span>'
-        + (other ? '<button type="button" class="nml-btn nml-btn-small" data-make-current="' + state.version + '">Сделать текущей</button>' : '')
-        + '</div>';
+        + '<div class="nml-vsel' + (state.versionsOpen ? ' open' : '') + '">'
+        + '<button type="button" class="nml-vsel-btn" data-vsel-toggle title="Выбрать версию">' + button + '<i>▾</i></button>'
+        + (state.versionsOpen ? '<div class="nml-vsel-list">' + rows + '</div>' : '')
+        + '</div></div>';
     }
     function summaryHtml(doc) {
       var shapes = doc.shapes || [];
@@ -354,9 +365,19 @@ NML.frame = (function () {
       if (t.closest('[data-choose-production]')) { e.stopPropagation(); chooseProduction(); return; }
       if (t.closest('[data-auto-production]')) { e.stopPropagation(); autoProduction(); return; }
       if (t.closest('[data-open-editor]')) { e.stopPropagation(); openEditor(); return; }
-      if (t.closest('[data-version-select]')) { e.stopPropagation(); return; }
-      var mc = t.closest('[data-make-current]');
-      if (mc) { e.stopPropagation(); makeCurrent(+mc.getAttribute('data-make-current')); return; }
+      if (t.closest('[data-vsel-toggle]')) { e.stopPropagation(); state.versionsOpen = !state.versionsOpen; render(); return; }
+      var pick = t.closest('[data-version-pick]');
+      if (pick) {
+        e.stopPropagation();
+        var n = +pick.getAttribute('data-version-pick');
+        state.versionsOpen = false;
+        if (state.versions && n === state.versions.current && !(state.doc && state.variant === 'sidecar' && state.doc.markup_version == null)) {
+          if (state.variant !== 'sidecar') setVariant('sidecar'); else render();
+          return;
+        }
+        makeCurrent(n);
+        return;
+      }
       if (t.closest('[data-open-video]')) {
         e.stopPropagation();
         C.postJson('api/open-video', { video: o.video }).then(function (d) { C.toast('Открываю ' + d.path); })
@@ -370,24 +391,22 @@ NML.frame = (function () {
       var obj = e.target.closest && e.target.closest('.nml-obj');
       highlight(obj ? obj.getAttribute('data-index') : null);
     }
-    function onChange(e) {
-      var sel = e.target.closest && e.target.closest('[data-version-select]');
-      if (!sel) return;
-      state.version = sel.value ? +sel.value : null;
-      if (state.variant !== 'sidecar') { state.variant = 'sidecar'; if (o.onVariant) o.onVariant('sidecar'); }
-      loadDoc();
-    }
     function makeCurrent(n) {
       C.postJson(urls.versionCurrent, { video: o.video, number: n }).then(function () {
         C.toast('Текущая версия — v' + n);
         state.version = null; state.cache = {};
+        if (state.variant !== 'sidecar') { state.variant = 'sidecar'; if (o.onVariant) o.onVariant('sidecar'); }
         if (o.onSaved) o.onSaved('sidecar', state.entry.sidecar);
         loadVersions();
         loadDoc();
       }).catch(function (err) { C.toast(err.message, true); });
     }
     host.addEventListener('click', onClick);
-    host.addEventListener('change', onChange);
+    // Щелчок вне списка версий закрывает его
+    function onOutside(e) {
+      if (state.versionsOpen && !(e.target.closest && e.target.closest('.nml-vsel'))) { state.versionsOpen = false; render(); }
+    }
+    document.addEventListener('click', onOutside);
     if (info) { info.addEventListener('mouseover', onOver); info.addEventListener('mouseleave', function () { highlight(null); }); }
 
     // Панель не выше кадра: объекты прокручиваются внутри, кнопки внизу всегда видны.
@@ -422,6 +441,7 @@ NML.frame = (function () {
       destroy: function () {
         state.alive = false;
         if (resizeObserver) resizeObserver.disconnect();
+        document.removeEventListener('click', onOutside);
         host.removeEventListener('click', onClick); host.innerHTML = ''; host.classList.remove('nml-frame');
       },
       get variant() { return state.variant; },

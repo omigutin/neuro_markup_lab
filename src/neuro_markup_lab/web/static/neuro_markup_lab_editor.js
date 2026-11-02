@@ -62,7 +62,6 @@ NML.editor = (function () {
   var ctx = null;            // {video, videoName, jsonsDir, productionKey, version, entry, variant, urls, onSaved}
   var versions = null;       // список версий разметки рядом с видео (ответ /api/versions)
   var compare = null;        // сравниваемая версия: {number, doc}
-  var pinnedOnly = false;    // в списке версий — только закреплённые
   var domReady = null;       // загрузка окна редактора (Promise)
   var doc = null;            // ответ /api/markup
   var known = {};            // известные поля модели фигуры: имя → spec
@@ -96,8 +95,8 @@ NML.editor = (function () {
       ctx.urls = Object.assign({}, DEFAULT_URLS, context.urls || {});
       ctx.jsonsDir = ctx.jsonsDir || '';
       ctx.videoName = ctx.videoName || String(ctx.video || '').split(/[\\/]/).pop();
-      el('nml-editor-video').textContent = ctx.videoName;
-      el('nml-editor-video').title = ctx.video || '';
+      el('nml-editor-title').textContent = ctx.videoName;
+      el('nml-editor-title').title = ctx.video || '';
       show();
       if (ctx.entry) { start(); return; }
       el('nml-editor-canvas').innerHTML = '<div>Загрузка…</div>';
@@ -139,9 +138,10 @@ NML.editor = (function () {
     var seq = ++loadSeq;
     ctx.variant = variant;
     ctx.version = variant === 'sidecar' && version != null ? version : null;
+    // Прежний кадр остаётся на месте до загрузки новой разметки: вёрстка не прыгает
+    var canvas = el('nml-editor-canvas');
+    if (svg) canvas.classList.add('nml-loading'); else canvas.innerHTML = '<div>Загрузка…</div>';
     svg = null; handlesLayer = null; shapes = []; selectedIndex = -1; compare = null;
-    el('nml-editor-canvas').innerHTML = '<div>Загрузка…</div>';
-    el('nml-editor-source').textContent = '';
     C.getJson(ctx.urls.markup, { video: ctx.video, variant: variant, jsons: ctx.jsonsDir, key: ctx.productionKey || '',
                                  version: ctx.version == null ? '' : ctx.version }).then(function (d) {
       if (seq !== loadSeq) return;
@@ -159,6 +159,7 @@ NML.editor = (function () {
     }).catch(function (err) {
       if (seq !== loadSeq) return;
       doc = null;
+      el('nml-editor-canvas').classList.remove('nml-loading');
       el('nml-editor-canvas').innerHTML = '<div>Не удалось открыть разметку: ' + esc(err.message) + '</div>';
       C.renderSwitch(el('nml-editor-switch'), ctx.entry, ctx.variant, switchVariant);
     });
@@ -262,6 +263,7 @@ NML.editor = (function () {
   function buildScene() {
     var canvas = el('nml-editor-canvas');
     canvas.innerHTML = '';
+    canvas.classList.remove('nml-loading');
     svg = document.createElementNS(SVGNS, 'svg');
     svg.setAttribute('class', 'nml-svg');
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
@@ -682,24 +684,32 @@ NML.editor = (function () {
     renderDocFields();
     applySelection();
   }
+  // Шапка: открытая разметка (цвет варианта, версия) и полный путь к её JSON ссылкой
   function renderHeader() {
     var loc = doc.location || {};
     var version = '';
     if (ctx.variant === 'sidecar') {
-      if (doc.markup_version != null) {
-        version = ' · <b>v' + doc.markup_version + '</b>' + (doc.markup_version === doc.current_version
-          ? ' <span class="muted">текущая</span>' : ' <span class="nml-warn-text">не текущая</span>');
-      } else if (doc.versions_count) {
-        version = ' · <span class="nml-warn-text">файл изменён вне редактора — сохранится отдельной версией</span>';
-      }
+      if (doc.markup_version != null) version = ' · v' + doc.markup_version;
+      else if (doc.versions_count) version = ' · <span class="nml-warn-text">изменён вне версий — сохранится новой версией</span>';
     }
-    el('nml-editor-source').innerHTML = '<b>' + esc(C.VARIANT_LABELS[ctx.variant]) + '</b>' + version + ' · '
+    el('nml-editor-source').innerHTML = '<b class="nml-v-' + esc(ctx.variant) + '">' + esc(C.VARIANT_LABELS[ctx.variant]) + version + '</b> '
       + '<a href="#" class="nml-link" data-open-variant="' + esc(ctx.variant) + '" title="Открыть в программе по умолчанию">'
-      + esc(loc.name || '') + '</a><span class="muted">' + esc(loc.path || '') + '</span>';
-    C.renderSwitch(el('nml-editor-switch'), ctx.entry, ctx.variant, switchVariant);
-    var btn = el('nml-versions-btn'), count = ctx.variant === 'sidecar' ? doc.versions_count : (versions ? versions.versions.length : 0);
-    btn.textContent = 'Версии' + (count ? ' (' + count + ')' : '');
-    if (!el('nml-versions').classList.contains('hidden')) refreshVersions();
+      + esc(loc.path || loc.name || '') + '</a>';
+    renderSwitch();
+    if (ctx.variant === 'sidecar' && doc.versions_count) refreshVersions();
+    else { versions = null; el('nml-versions').classList.add('hidden'); }
+  }
+  // Переключатель вариантов и, для разметки рядом с видео с версиями, кнопка версии «vN ▾»
+  function renderSwitch() {
+    var host = el('nml-editor-switch');
+    C.renderSwitch(host, ctx.entry, ctx.variant, switchVariant);
+    if (!doc || ctx.variant !== 'sidecar' || !doc.versions_count) return;
+    var n = doc.markup_version;
+    var v = n != null ? versionByNumber(n) : null;
+    var title = n == null ? 'Файл изменён вне версий' : 'v' + n + (v && v.comment ? ' — ' + v.comment : '') + '. Выбрать версию';
+    host.insertAdjacentHTML('beforeend', '<button type="button" class="nml-ver-seg" data-ver-toggle title="' + esc(title) + '">'
+      + (n != null ? 'v' + n : 'вне версий') + ' ▾</button>');
+    host.querySelector('[data-ver-toggle]').addEventListener('click', function (e) { e.stopPropagation(); toggleVersions(); });
   }
   // Кнопка «в боевой JSON» неактивна, если путь боевого JSON не определён; «в версию» — только для открытой версии
   function renderSaveButtons() {
@@ -707,10 +717,21 @@ NML.editor = (function () {
     prod.disabled = !loc.path;
     prod.title = loc.path ? loc.path : (loc.reason || '');
     el('nml-save-sidecar').disabled = !(ctx.entry.sidecar || {}).path;
-    var over = el('nml-save-overwrite'), n = openVersion();
-    over.classList.toggle('hidden', n == null);
-    over.disabled = n == null;
-    over.textContent = n == null ? 'Сохранить в версию' : 'Сохранить в v' + n;
+    var save = el('nml-save-current'), target = currentTarget();
+    save.disabled = !doc || !target;
+    save.title = !target ? '' : target.variant === 'production' ? 'Перезаписать боевой JSON'
+      : target.mode === 'overwrite' ? 'Перезаписать версию v' + openVersion() + ' разметки рядом с видео'
+        : 'Сохранить новой версией разметки рядом с видео';
+  }
+  // Куда сохраняет «Сохранить»: в открытую версию, в боевой JSON или — файл вне версий — новой версией
+  function currentTarget() {
+    if (!doc || !ctx.variant) return null;
+    if (ctx.variant === 'production') return (ctx.entry.production || {}).path ? { variant: 'production' } : null;
+    return { variant: 'sidecar', mode: openVersion() != null ? 'overwrite' : 'new' };
+  }
+  function saveCurrent() {
+    var target = currentTarget();
+    if (target) doSave(target.variant, target.mode);
   }
   // Открытая версия разметки рядом с видео (null — открыта боевая или файл вне истории версий)
   function openVersion() { return doc && ctx.variant === 'sidecar' && doc.markup_version != null ? doc.markup_version : null; }
@@ -981,7 +1002,7 @@ NML.editor = (function () {
       changes: changes, fields: fields, dry_run: dryRun, confirm_production: !!confirmProduction };
   }
   function setSaving(busy) {
-    if (busy) { ['nml-save-sidecar', 'nml-save-production', 'nml-save-overwrite'].forEach(function (id) { el(id).disabled = true; }); }
+    if (busy) { ['nml-save-sidecar', 'nml-save-production', 'nml-save-current'].forEach(function (id) { el(id).disabled = true; }); }
     else renderSaveButtons();
   }
   // target: 'sidecar' | 'production'; mode для «рядом с видео»: 'new' — новая версия, 'overwrite' — в открытую версию
@@ -1068,6 +1089,7 @@ NML.editor = (function () {
     if (!versions) panel.innerHTML = '<div class="muted nml-versions-empty">Загрузка…</div>';
     C.getJson(ctx.urls.versions, { video: ctx.video }).then(function (d) {
       versions = d;
+      renderSwitch();
       renderVersions();
     }).catch(function (err) { panel.innerHTML = '<div class="nml-error-text nml-versions-empty">' + esc(err.message) + '</div>'; });
   }
@@ -1077,37 +1099,33 @@ NML.editor = (function () {
     function two(n) { return (n < 10 ? '0' : '') + n; }
     return two(d.getDate()) + '.' + two(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + two(d.getHours()) + ':' + two(d.getMinutes());
   }
+  // Список версий рядом с видео: звёздочка, номер, комментарий, время, «текущая» отдельным столбцом, «Сравнить».
+  // Щелчок по строке делает версию текущей и открывает её.
   function renderVersions() {
     var panel = el('nml-versions');
     var list = ((versions && versions.versions) || []).slice().reverse();
-    var shown = pinnedOnly ? list.filter(function (v) { return v.pinned; }) : list;
-    var open = openVersion();
-    var head = '<div class="nml-versions-head"><b>Версии рядом с видео: ' + list.length + '</b>'
-      + '<label class="nml-check"><input type="checkbox" data-pinned-only' + (pinnedOnly ? ' checked' : '') + '> только закреплённые</label></div>';
+    var current = versions ? versions.current : null;
     var cmp = compare ? '<div class="nml-versions-compare">' + compareSummary()
       + ' <button type="button" class="nml-btn nml-btn-small" data-compare-off>Убрать сравнение</button></div>' : '';
-    if (!list.length) { panel.innerHTML = head + '<div class="muted nml-versions-empty">Версий пока нет: они появятся при сохранении рядом с видео.</div>'; return; }
-    panel.innerHTML = head + cmp + '<div class="nml-versions-list">' + shown.map(function (v) {
-      var current = v.number === versions.current, isOpen = v.number === open;
+    if (!list.length) { panel.innerHTML = '<div class="muted nml-versions-empty">Версий пока нет: они появятся при сохранении рядом с видео.</div>'; return; }
+    panel.innerHTML = cmp + '<div class="nml-versions-list">' + list.map(function (v) {
+      var isCurrent = v.number === current;
       var meta = [fmtTime(v.updated !== v.created ? v.updated : v.created)];
       if (ORIGIN_LABELS[v.origin]) meta.push(ORIGIN_LABELS[v.origin]);
-      if (v.based_on != null) meta.push('из v' + v.based_on);
-      else if (v.source === 'production') meta.push('из боевой');
-      return '<div class="nml-ver' + (current ? ' current' : '') + (isOpen ? ' open' : '') + '" data-ver="' + v.number + '" title="Открыть версию в редакторе">'
-        + '<button type="button" class="nml-ver-pin' + (v.pinned ? ' on' : '') + '" data-pin="' + v.number + '" title="' + (v.pinned ? 'Открепить' : 'Закрепить') + '">★</button>'
-        + '<div class="nml-ver-main"><div><b>v' + v.number + '</b>'
-        + (current ? ' <span class="nml-tag nml-tag-active">текущая</span>' : '') + (isOpen ? ' <span class="nml-tag">открыта</span>' : '')
-        + ' <span class="muted">' + esc(meta.join(' · ')) + '</span></div>'
-        + (v.comment ? '<div class="nml-ver-comment">' + esc(v.comment) + '</div>' : '') + '</div>'
-        + '<div class="nml-ver-actions">'
-        + (isOpen ? '' : '<button type="button" class="nml-btn nml-btn-small" data-compare="' + v.number + '" title="Показать контуры этой версии поверх открытой">Сравнить</button>')
-        + (current ? '' : '<button type="button" class="nml-btn nml-btn-small" data-make-current="' + v.number + '" title="Файл рядом с видео станет равен этой версии">Сделать текущей</button>')
-        + '</div></div>';
-    }).join('') + (shown.length ? '' : '<div class="muted nml-versions-empty">Закреплённых версий нет.</div>') + '</div>';
+      return '<div class="nml-ver' + (isCurrent ? ' current' : '') + '" data-ver="' + v.number + '"'
+        + ' title="' + (isCurrent ? 'Текущая версия' : 'Сделать текущей и открыть') + '">'
+        + '<button type="button" class="nml-ver-pin' + (v.pinned ? ' on' : '') + '" data-pin="' + v.number + '" title="' + (v.pinned ? 'Убрать из избранного' : 'В избранное') + '">★</button>'
+        + '<b class="nml-ver-n">v' + v.number + '</b>'
+        + '<span class="nml-ver-comment">' + esc(v.comment || '') + '</span>'
+        + '<span class="muted nml-ver-meta">' + esc(meta.join(' · ')) + '</span>'
+        + '<span class="nml-ver-cur">' + (isCurrent ? 'текущая' : '') + '</span>'
+        + (v.number === openVersion() ? '<span></span>'
+          : '<button type="button" class="nml-btn nml-btn-small" data-compare="' + v.number + '" title="Показать контуры этой версии поверх открытой">Сравнить</button>')
+        + '</div>';
+    }).join('') + '</div>';
   }
   function onVersionsClick(e) {
     var t = e.target;
-    if (t.closest('[data-pinned-only]')) { pinnedOnly = t.closest('[data-pinned-only]').checked; renderVersions(); return; }
     if (t.closest('[data-compare-off]')) { setCompare(null); return; }
     var pin = t.closest('[data-pin]');
     if (pin) {
@@ -1124,30 +1142,25 @@ NML.editor = (function () {
       }).catch(function (err) { C.toast(err.message, true); });
       return;
     }
-    var cur = t.closest('[data-make-current]');
-    if (cur) { makeCurrent(+cur.getAttribute('data-make-current')); return; }
     var row = t.closest('[data-ver]');
-    if (row) openVersionInEditor(+row.getAttribute('data-ver'));
+    if (row) { el('nml-versions').classList.add('hidden'); makeCurrent(+row.getAttribute('data-ver')); }
   }
   function versionByNumber(n) {
     return ((versions && versions.versions) || []).filter(function (v) { return v.number === n; })[0] || null;
   }
-  function openVersionInEditor(n) {
-    if (openVersion() === n) return;
-    if (!isDirty()) { load('sidecar', n); return; }
-    confirmDialog('Открыть версию v' + n + '?', 'Несохранённые изменения будут потеряны.', 'Открыть', function () { load('sidecar', n); });
-  }
+  // Версия становится текущей (файл рядом с видео — равен ей; изменённый вне версий файл сначала
+  // сохраняется отдельной версией) и открывается в редакторе
   function makeCurrent(n) {
+    if (n === openVersion() && n === (versions && versions.current)) return;
     function run() {
       C.postJson(ctx.urls.versionCurrent, { video: ctx.video, number: n }).then(function () {
         C.toast('Текущая версия — v' + n);
         notifySaved('sidecar', ctx.entry.sidecar);
-        load('sidecar', n);
+        load('sidecar', null);
       }).catch(function (err) { C.toast(err.message, true); });
     }
-    confirmDialog('Сделать v' + n + ' текущей?', 'Файл разметки рядом с видео станет равен версии v' + n + '. Остальные версии не меняются.'
-      + (isDirty() ? '<div class="nml-warn-text" style="margin-top:6px">Несохранённые изменения в редакторе будут потеряны.</div>' : ''),
-      'Сделать текущей', run);
+    if (!isDirty()) { run(); return; }
+    confirmDialog('Сделать v' + n + ' текущей?', 'Несохранённые изменения в редакторе будут потеряны.', 'Сделать текущей', run);
   }
   // Сравнение: контуры другой версии пунктиром поверх кадра и сводка отличий
   function setCompare(value) {
@@ -1225,9 +1238,8 @@ NML.editor = (function () {
     el('nml-editor-cancel').addEventListener('click', requestClose);
     overlay.addEventListener('click', requestClose);
     el('nml-save-sidecar').addEventListener('click', function () { doSave('sidecar', 'new'); });
-    el('nml-save-overwrite').addEventListener('click', function () { doSave('sidecar', 'overwrite'); });
+    el('nml-save-current').addEventListener('click', saveCurrent);
     el('nml-save-production').addEventListener('click', function () { doSave('production'); });
-    el('nml-versions-btn').addEventListener('click', function (e) { e.stopPropagation(); toggleVersions(); });
     el('nml-versions').addEventListener('click', function (e) { e.stopPropagation(); onVersionsClick(e); });
     modal.addEventListener('click', function () { el('nml-versions').classList.add('hidden'); });
     el('nml-dialog-body').addEventListener('click', function (e) {
