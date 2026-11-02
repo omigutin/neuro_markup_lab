@@ -1,4 +1,4 @@
-// Страница NeuroMarkupLab: каталог видео и каталог JSON производства (помнит браузер), список
+// Страница NeuroMarkupLab: каталог видео и каталог боевых JSON (помнит браузер), список
 // видео с раскрывающейся карточкой: ссылки на JSON (открываются программой по умолчанию), первый
 // кадр с разметкой, поверх кадра — переключатель «Боевая | Рядом с видео» и карандаш редактора.
 // Только представление: данные — из API страницы.
@@ -31,12 +31,9 @@
   }
   function pickFolder(input) {
     C.toast('Открываю выбор каталога…');
-    fetch('/api/local-files/browse-folder', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initial_directory: input.value.trim() }),
-    }).then(function (r) { return r.json(); }).then(function (d) {
-      if (d && d.path) { input.value = d.path; saveInputs(); load(); } else C.toast('Каталог не выбран.');
-    }).catch(function () { C.toast('Выбор каталога недоступен.', true); });
+    C.postJson('api/pick', { initial: input.value.trim() }).then(function (d) {
+      if (d.path) { input.value = d.path; saveInputs(); load(); } else C.toast('Каталог не выбран.');
+    }).catch(function (err) { C.toast('Выбор каталога недоступен: ' + err.message, true); });
   }
 
   // ------------------------------------------------------------------ список
@@ -45,7 +42,7 @@
     if (!path) { entries = []; render(); statusHost.textContent = 'Укажите каталог видео.'; return; }
     var seq = ++loadSeq;
     statusHost.textContent = 'Загрузка…';
-    C.getJson('/api/videos', { path: path, recursive: recursiveCb.checked ? 1 : '', jsons: jsonsInput.value.trim() })
+    C.getJson('api/videos', { path: path, recursive: recursiveCb.checked ? 1 : '', jsons: jsonsInput.value.trim() })
       .then(function (d) {
         if (seq !== loadSeq) return;
         jsonsDir = d.jsons_dir || '';
@@ -139,7 +136,7 @@
   }
   function drawOverlay(v, box) {
     var variant = v.cardVariant;
-    var promise = v.cache[variant] || (v.cache[variant] = C.getJson('/api/markup', { video: v.path, variant: variant, jsons: jsonsDir }));
+    var promise = v.cache[variant] || (v.cache[variant] = C.getJson('api/markup', { video: v.path, variant: variant, jsons: jsonsDir }));
     promise.then(function (doc) {
       if (v.cardVariant !== variant || !box.isConnected) return;
       var old = box.querySelector('.nml-preview-svg');

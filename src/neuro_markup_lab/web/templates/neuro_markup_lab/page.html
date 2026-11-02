@@ -4,18 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Разметка — NeuroMarkupLab</title>
-  <link rel="stylesheet" href="{{ static }}/neuro_markup_lab.css">
+  <link rel="stylesheet" href="static/neuro_markup_lab.css">
 </head>
 <body>
   {{ nav | safe }}
   <main class="nml-page" id="nml-page">
-    {# Каталоги: видео (с подкаталогами) и JSON производства. Значения помнит браузер. #}
+    {# Каталоги: видео (с подкаталогами) и боевые JSON. Значения помнит браузер. #}
     <section class="nml-panel nml-toolbar">
       <div class="nml-field">
         <label class="nml-label" for="nml-video-dir">Каталог видео</label>
         <div class="nml-row">
           <input type="text" id="nml-video-dir" class="nml-input" autocomplete="off"
-                 placeholder="напр. W:\MATLLER\ivanis\line1">
+                 placeholder="напр. D:\video\plant\line1">
           <button type="button" class="nml-btn" data-pick="nml-video-dir">Выбрать</button>
         </div>
         <label class="nml-check">
@@ -23,10 +23,10 @@
         </label>
       </div>
       <div class="nml-field">
-        <label class="nml-label" for="nml-jsons-dir">Каталог JSON производства</label>
+        <label class="nml-label" for="nml-jsons-dir">Каталог боевых JSON</label>
         <div class="nml-row">
           <input type="text" id="nml-jsons-dir" class="nml-input" autocomplete="off"
-                 placeholder="напр. W:\PycharmProjects\MATLLER\pc_develop\src\jsons\ivanis">
+                 placeholder="напр. D:\markup\plant">
           <button type="button" class="nml-btn" data-pick="nml-jsons-dir">Выбрать</button>
         </div>
         <div class="nml-hint muted">Боевые JSON камер: &lt;factory&gt;_cam&lt;N&gt;.json</div>
@@ -41,10 +41,8 @@
     <section class="nml-list" id="nml-list"></section>
   </main>
 
-  {% include 'neuro_markup_lab/editor_modal.html' %}
-
-  <script src="{{ static }}/neuro_markup_lab_shapes.js"></script>
-  <script src="{{ static }}/neuro_markup_lab_editor.js"></script>
-  <script src="{{ static }}/neuro_markup_lab_page.js"></script>
+  <script src="static/neuro_markup_lab_shapes.js"></script>
+  <script src="static/neuro_markup_lab_editor.js"></script>
+  <script src="static/neuro_markup_lab_page.js"></script>
 </body>
 </html>

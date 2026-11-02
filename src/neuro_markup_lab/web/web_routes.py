@@ -1,32 +1,39 @@
 """
-Маршруты NeuroMarkupLab. Тонкие: разбирают запрос и делегируют :class:`MarkupLabService`.
+Маршруты редактора разметки. Тонкие: разбирают запрос и делегируют :class:`MarkupLabService`.
 
+Адреса считаются от корня приложения редактора: при встраивании под префиксом страница
+доступна по ``<префикс>/``, а её HTML и JS обращаются к API относительными адресами.
 Обработчики синхронные: чтение видео и файлов блокирующее, FastAPI выполняет их в пуле потоков.
 """
 
 __all__ = ['markup_lab_router']
 
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 
+from .. import __version__
 from ..lab import parse_save_request
 from ..markup import MarkupError
 from ..storage import MarkupVariant
 from ..videos import FULL_WIDTH, PREVIEW_WIDTH, first_frame_jpeg
-from .web_types import NAV_KEY, PAGE_ROUTE, STATIC_PREFIX, NeuroMarkupLabWebDependencies
+from .web_folder_picker_error import FolderPickerError
+from .web_types import APP_ID, NeuroMarkupLabWebDependencies
 
 markup_lab_router = APIRouter()
 
 # Значения параметра запроса, означающие «да»
 _TRUE_VALUES: frozenset[str] = frozenset({'1', 'true', 'on', 'yes'})
 _NO_STORE = {'Cache-Control': 'no-store'}
+# Код перенаправления на адрес страницы со «/» на конце (метод запроса сохраняется)
+_REDIRECT_STATUS = 307
 
 
 def _deps(request: Request) -> NeuroMarkupLabWebDependencies:
-    deps: NeuroMarkupLabWebDependencies = request.app.state.nml_web_deps
+    deps: NeuroMarkupLabWebDependencies = request.app.state.nml
     return deps
 
 
@@ -38,17 +45,37 @@ def _error(message: str, status: int = 400) -> JSONResponse:
     return JSONResponse({'ok': False, 'error': message}, status_code=status, headers=_NO_STORE)
 
 
-@markup_lab_router.get(PAGE_ROUTE, response_class=HTMLResponse)
-def markup_lab_page(request: Request) -> HTMLResponse:
+async def _json_object(request: Request) -> dict[str, Any] | JSONResponse:
+    """ Тело запроса — JSON-объект, иначе ответ с ошибкой. """
+    try:
+        payload = await request.json()
+    except ValueError:
+        return _error('Request body must be JSON')
+    if not isinstance(payload, dict):
+        return _error('Request body must be a JSON object')
+    return payload
+
+
+@markup_lab_router.get('/', response_class=HTMLResponse)
+def markup_lab_page(request: Request) -> Response:
     """ Страница разметки: каталог видео и JSON, список видео, редактор. Данные грузит JS. """
-    nav_renderer = request.app.state.nml_nav
-    nav_html = nav_renderer(NAV_KEY, '') if nav_renderer else ''
+    # Адреса на странице относительные, поэтому адрес страницы должен заканчиваться на «/»
+    if not request.url.path.endswith('/'):
+        return RedirectResponse(str(request.url.replace(path=request.url.path + '/')), status_code=_REDIRECT_STATUS)
+    nav_renderer = _deps(request).nav_renderer
     response: HTMLResponse = request.app.state.nml_jinja.TemplateResponse(
-        request, 'neuro_markup_lab/page.html', {'nav': nav_html, 'static': STATIC_PREFIX})
+        request, 'neuro_markup_lab/page.html', {'nav': nav_renderer() if nav_renderer else ''},
+        headers=_NO_STORE)
     return response
 
 
-@markup_lab_router.get(f'{PAGE_ROUTE}/api/videos')
+@markup_lab_router.get('/api/ping')
+def ping() -> JSONResponse:
+    """ Кто отвечает на порту: отдельный запуск узнаёт по нему уже работающий редактор. """
+    return JSONResponse({'app': APP_ID, 'version': __version__})
+
+
+@markup_lab_router.get('/api/videos')
 def list_videos(request: Request) -> JSONResponse:
     """ Видео каталога и наличие разметки рядом с видео и в каталоге JSON. """
     recursive = _param(request, 'recursive').lower() in _TRUE_VALUES
@@ -56,7 +83,17 @@ def list_videos(request: Request) -> JSONResponse:
     return JSONResponse({'ok': not listing.error, **listing.as_dict()}, headers=_NO_STORE)
 
 
-@markup_lab_router.get(f'{PAGE_ROUTE}/api/markup')
+@markup_lab_router.get('/api/locations')
+def video_locations(request: Request) -> JSONResponse:
+    """ Где лежит разметка одного видео: для редактора, открытого из чужой страницы. """
+    try:
+        entry = _deps(request).service.video_entry(_param(request, 'video'), _param(request, 'jsons'))
+    except MarkupError as exc:
+        return _error(str(exc), status=404)
+    return JSONResponse({'ok': True, **entry.as_dict()}, headers=_NO_STORE)
+
+
+@markup_lab_router.get('/api/markup')
 def open_markup(request: Request) -> JSONResponse:
     """ Разметка выбранного варианта для видео: фигуры, схема атрибутов, расхождения типов. """
     try:
@@ -70,35 +107,26 @@ def open_markup(request: Request) -> JSONResponse:
     return JSONResponse({'ok': True, **view.as_dict()}, headers=_NO_STORE)
 
 
-@markup_lab_router.post(f'{PAGE_ROUTE}/api/save')
+@markup_lab_router.post('/api/save')
 async def save_markup(request: Request) -> JSONResponse:
     """ Проверка (``dry_run``) или сохранение разметки с приведением типов во всём документе. """
-    try:
-        payload = await request.json()
-    except ValueError:
-        return _error('Request body must be JSON')
-    if not isinstance(payload, dict):
-        return _error('Request body must be a JSON object')
+    payload = await _json_object(request)
+    if isinstance(payload, JSONResponse):
+        return payload
     try:
         save_request = parse_save_request(payload)
-    except MarkupError as exc:
-        return _error(str(exc))
-    try:
         result = await run_in_threadpool(_deps(request).service.save, save_request)
     except MarkupError as exc:
         return _error(str(exc))
     return JSONResponse({'ok': True, **result.as_dict()}, headers=_NO_STORE)
 
 
-@markup_lab_router.post(f'{PAGE_ROUTE}/api/open-file')
+@markup_lab_router.post('/api/open-file')
 async def open_markup_file(request: Request) -> JSONResponse:
     """ Открывает JSON разметки видео в программе по умолчанию на этом компьютере. """
-    try:
-        payload = await request.json()
-    except ValueError:
-        return _error('Request body must be JSON')
-    if not isinstance(payload, dict):
-        return _error('Request body must be a JSON object')
+    payload = await _json_object(request)
+    if isinstance(payload, JSONResponse):
+        return payload
     try:
         variant = MarkupVariant(payload.get('variant'))
     except ValueError:
@@ -113,7 +141,23 @@ async def open_markup_file(request: Request) -> JSONResponse:
     return JSONResponse({'ok': True, 'path': str(path)}, headers=_NO_STORE)
 
 
-@markup_lab_router.get(f'{PAGE_ROUTE}/frame')
+@markup_lab_router.post('/api/pick')
+async def pick_folder(request: Request) -> JSONResponse:
+    """ Системное окно выбора каталога на компьютере сервера; отмена — ``path: null``. """
+    payload = await _json_object(request)
+    if isinstance(payload, JSONResponse):
+        return payload
+    initial = payload.get('initial') or ''
+    if not isinstance(initial, str):
+        return _error('Field "initial" must be a string')
+    try:
+        path = await run_in_threadpool(_deps(request).folder_picker, initial)
+    except FolderPickerError as exc:
+        return _error(str(exc), status=503)
+    return JSONResponse({'ok': True, 'path': path}, headers=_NO_STORE)
+
+
+@markup_lab_router.get('/frame')
 def video_frame(request: Request) -> Response:
     """ Первый кадр видео в JPEG: ``full=1`` — для редактора, иначе — для карточки. """
     max_width = FULL_WIDTH if _param(request, 'full') else PREVIEW_WIDTH

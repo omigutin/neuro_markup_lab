@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from neuro_markup_lab.lab import MarkupLabService
-from neuro_markup_lab.web import NeuroMarkupLabWebDependencies, mount
+from neuro_markup_lab.web import FolderPickerError, mount_app
 
 from ..conftest import read_json
 
@@ -23,52 +23,109 @@ def opener() -> _Opener:
     return _Opener()
 
 
+# Префикс встраивания в тестах: проверяет, что страница и API не зависят от адреса
+PREFIX = '/x/lab'
+
+
+class _Picker:
+    def __init__(self) -> None:
+        self.initial: list[str] = []
+        self.result: str | None = '/picked'
+        self.error = False
+
+    def __call__(self, initial: str) -> str | None:
+        self.initial.append(initial)
+        if self.error:
+            raise FolderPickerError('no tkinter')
+        return self.result
+
+
 @pytest.fixture
-def client(opener) -> TestClient:
+def picker() -> _Picker:
+    return _Picker()
+
+
+@pytest.fixture
+def client(opener, picker) -> TestClient:
     app = FastAPI()
-    deps = NeuroMarkupLabWebDependencies(service=MarkupLabService(opener=opener))
-    mount(app, nav_renderer=lambda active, user: f'<nav data-active="{active}"></nav>', deps=deps)
+    mount_app(app, PREFIX, MarkupLabService(opener=opener), nav_renderer=lambda: '<nav data-active="markup"></nav>',
+              folder_picker=picker)
     return TestClient(app)
 
 
-def test_page_renders_with_nav_and_static(client):
-    response = client.get('/neuro-markup-lab')
+def test_page_renders_with_nav_and_relative_static(client):
+    response = client.get(f'{PREFIX}/')
     assert response.status_code == 200
     html = response.text
     assert 'data-active="markup"' in html
     names = ('neuro_markup_lab.css', 'neuro_markup_lab_shapes.js', 'neuro_markup_lab_editor.js',
              'neuro_markup_lab_page.js')
     for name in names:
-        assert f'/neuro-markup-lab-static/{name}' in html
-        static = client.get(f'/neuro-markup-lab-static/{name}')
+        assert f'"static/{name}"' in html
+        static = client.get(f'{PREFIX}/static/{name}')
         assert static.status_code == 200 and static.headers['cache-control'] == 'no-store'
-    assert 'id="nml-editor"' in html
-    assert 'data-save="sidecar"' in html and 'data-save="production"' in html
+    # Абсолютных адресов на странице нет: её можно встроить под любым префиксом
+    assert 'href="/' not in html and 'src="/' not in html
+
+
+def test_page_redirects_to_trailing_slash(client):
+    response = client.get(PREFIX, follow_redirects=False)
+    assert response.status_code in (307, 308) and response.headers['location'].endswith(f'{PREFIX}/')
+
+
+def test_editor_markup_is_static(client):
+    html = client.get(f'{PREFIX}/static/neuro_markup_lab_editor.html').text
+    assert 'id="nml-editor"' in html and 'data-save="sidecar"' in html and 'data-save="production"' in html
+    assert '{#' not in html and '{%' not in html
+
+
+def test_ping(client):
+    assert client.get(f'{PREFIX}/api/ping').json()['app'] == 'neuro_markup_lab'
+
+
+def test_locations_api(client, workspace):
+    ws = workspace(sidecar=True)
+    data = client.get(f'{PREFIX}/api/locations', params={'video': str(ws['video']), 'jsons': str(ws['jsons'])}).json()
+    assert data['ok'] and data['sidecar']['exists'] and data['production']['exists']
+    assert data['default_variant'] == 'sidecar' and (data['factory'], data['cam_id']) == ('plant', '5')
+    missing = client.get(f'{PREFIX}/api/locations', params={'video': str(ws['videos'] / 'none.avi')})
+    assert missing.status_code == 404
+
+
+def test_pick_api(client, picker):
+    assert client.post(f'{PREFIX}/api/pick', json={'initial': 'D:/v'}).json() == {'ok': True, 'path': '/picked'}
+    assert picker.initial == ['D:/v']
+    picker.result = None
+    assert client.post(f'{PREFIX}/api/pick', json={}).json() == {'ok': True, 'path': None}
+    picker.error = True
+    response = client.post(f'{PREFIX}/api/pick', json={})
+    assert response.status_code == 503 and response.json()['ok'] is False
+    assert client.post(f'{PREFIX}/api/pick', json={'initial': 5}).json()['ok'] is False
 
 
 def test_videos_api(client, workspace):
     ws = workspace(sidecar=True)
-    data = client.get('/neuro-markup-lab/api/videos',
+    data = client.get(f'{PREFIX}/api/videos',
                       params={'path': str(ws['videos']), 'recursive': '1', 'jsons': str(ws['jsons'])}).json()
     assert data['ok'] and data['recursive'] and len(data['videos']) == 1
     assert data['videos'][0]['production']['exists'] and data['videos'][0]['default_variant'] == 'sidecar'
 
 
 def test_videos_api_error(client, tmp_path):
-    data = client.get('/neuro-markup-lab/api/videos', params={'path': str(tmp_path / 'none')}).json()
+    data = client.get(f'{PREFIX}/api/videos', params={'path': str(tmp_path / 'none')}).json()
     assert data['ok'] is False and data['error']
 
 
 def test_markup_api(client, workspace):
     ws = workspace()
-    response = client.get('/neuro-markup-lab/api/markup',
+    response = client.get(f'{PREFIX}/api/markup',
                           params={'video': str(ws['video']), 'variant': 'production', 'jsons': str(ws['jsons'])})
     data = response.json()
     assert response.status_code == 200 and data['ok'] and len(data['shapes']) == 2
     assert data['report']['conversions'][0]['field'] == 'wz'
-    bad = client.get('/neuro-markup-lab/api/markup', params={'video': str(ws['video']), 'variant': 'x'})
+    bad = client.get(f'{PREFIX}/api/markup', params={'video': str(ws['video']), 'variant': 'x'})
     assert bad.status_code == 400
-    missing = client.get('/neuro-markup-lab/api/markup', params={'video': str(ws['video']), 'variant': 'sidecar'})
+    missing = client.get(f'{PREFIX}/api/markup', params={'video': str(ws['video']), 'variant': 'sidecar'})
     assert missing.status_code == 404
 
 
@@ -77,31 +134,31 @@ def test_save_api_flow(client, workspace):
     body = {'video': str(ws['video']), 'jsons_dir': str(ws['jsons']), 'base_variant': 'production',
             'target_variant': 'production',
             'changes': {'0': {'points': [[1, 1], [5, 5]], 'shape_type': 'rectangle'}}}
-    check = client.post('/neuro-markup-lab/api/save', json={**body, 'dry_run': True}).json()
+    check = client.post(f'{PREFIX}/api/save', json={**body, 'dry_run': True}).json()
     assert check['ok'] and not check['saved'] and check['target']['exists']
-    refused = client.post('/neuro-markup-lab/api/save', json=body).json()
+    refused = client.post(f'{PREFIX}/api/save', json=body).json()
     assert refused['ok'] is False
-    saved = client.post('/neuro-markup-lab/api/save', json={**body, 'confirm_production': True}).json()
+    saved = client.post(f'{PREFIX}/api/save', json={**body, 'confirm_production': True}).json()
     assert saved['ok'] and saved['saved']
     document = read_json(ws['production'])
     assert document['shapes'][0]['points'] == [[1.0, 1.0], [5.0, 5.0]] and document['shapes'][0]['wz'] == 1
 
 
 def test_save_api_rejects_bad_body(client):
-    assert client.post('/neuro-markup-lab/api/save', content=b'not json').json()['ok'] is False
-    assert client.post('/neuro-markup-lab/api/save', json=[1]).json()['ok'] is False
-    assert client.post('/neuro-markup-lab/api/save', json={'video': ''}).json()['ok'] is False
+    assert client.post(f'{PREFIX}/api/save', content=b'not json').json()['ok'] is False
+    assert client.post(f'{PREFIX}/api/save', json=[1]).json()['ok'] is False
+    assert client.post(f'{PREFIX}/api/save', json={'video': ''}).json()['ok'] is False
 
 
 def test_frame_missing_video(client, tmp_path):
-    assert client.get('/neuro-markup-lab/frame', params={'video': str(tmp_path / 'none.avi')}).status_code == 404
+    assert client.get(f'{PREFIX}/frame', params={'video': str(tmp_path / 'none.avi')}).status_code == 404
 
 
 def test_open_file_api(client, opener, workspace):
     ws = workspace()
     body = {'video': str(ws['video']), 'variant': 'production', 'jsons_dir': str(ws['jsons'])}
-    data = client.post('/neuro-markup-lab/api/open-file', json=body).json()
+    data = client.post(f'{PREFIX}/api/open-file', json=body).json()
     assert data['ok'] and opener.opened == [ws['production']]
-    assert client.post('/neuro-markup-lab/api/open-file', json={**body, 'variant': 'x'}).json()['ok'] is False
-    assert client.post('/neuro-markup-lab/api/open-file', json={**body, 'variant': 'sidecar'}).json()['ok'] is False
-    assert client.post('/neuro-markup-lab/api/open-file', json=[1]).json()['ok'] is False
+    assert client.post(f'{PREFIX}/api/open-file', json={**body, 'variant': 'x'}).json()['ok'] is False
+    assert client.post(f'{PREFIX}/api/open-file', json={**body, 'variant': 'sidecar'}).json()['ok'] is False
+    assert client.post(f'{PREFIX}/api/open-file', json=[1]).json()['ok'] is False

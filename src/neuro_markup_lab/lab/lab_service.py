@@ -52,14 +52,24 @@ class MarkupLabService:
             return listing
         sources = self._sources(jsons_path)
         for file in files:
-            camera = self._camera_resolver(file.path)
-            listing.videos.append(VideoEntry(
-                path=file.path, relative_dir=file.relative_dir,
-                factory=camera.factory if camera else None, cam_id=camera.cam_id if camera else None,
-                sidecar=sources[MarkupVariant.SIDECAR].locate(file.path),
-                production=sources[MarkupVariant.PRODUCTION].locate(file.path),
-            ))
+            listing.videos.append(self._entry(file.path, file.relative_dir, sources))
         return listing
+
+    def video_entry(self, video: str, jsons_dir: str) -> VideoEntry:
+        """ Одно видео и где лежит его разметка: для редактора, открытого из чужой страницы. """
+        video_path = _video_path(video)
+        jsons_path, _error = _resolve_jsons_dir(jsons_dir)
+        return self._entry(video_path, '', self._sources(jsons_path))
+
+    def _entry(self, video_path: Path, relative_dir: str,
+               sources: dict[MarkupVariant, MarkupSource]) -> VideoEntry:
+        camera = self._camera_resolver(video_path)
+        return VideoEntry(
+            path=video_path, relative_dir=relative_dir,
+            factory=camera.factory if camera else None, cam_id=camera.cam_id if camera else None,
+            sidecar=sources[MarkupVariant.SIDECAR].locate(video_path),
+            production=sources[MarkupVariant.PRODUCTION].locate(video_path),
+        )
 
     def open(self, video: str, variant: MarkupVariant, jsons_dir: str) -> MarkupView:
         """ Разметка ``variant`` для видео и расхождения типов в ней. Нет разметки — :class:`MarkupError`. """

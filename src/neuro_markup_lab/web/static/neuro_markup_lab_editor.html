@@ -1,6 +1,6 @@
-{# Редактор разметки: кадр и фигуры в одном <svg> (одна система координат), справа панель
+<!-- Редактор разметки: кадр и фигуры в одном <svg> (одна система координат), справа панель
    фигур и атрибутов, внизу кнопки сохранения. Наполнение — neuro_markup_lab_editor.js.
-   Блоки панели не появляются и не исчезают при работе — вёрстка не съезжает. #}
+   Блоки панели не появляются и не исчезают при работе — вёрстка не съезжает. -->
 <div class="nml-overlay hidden" id="nml-editor-overlay"></div>
 <div class="nml-modal nml-editor hidden" id="nml-editor" role="dialog" aria-modal="true"
      aria-labelledby="nml-editor-title" aria-hidden="true">
@@ -16,7 +16,7 @@
   <div class="nml-editor-body">
     <div class="nml-editor-stage">
       <div class="nml-editor-canvas" id="nml-editor-canvas"></div>
-      {# Переключатель «Боевая | Рядом с видео» поверх кадра #}
+      <!-- Переключатель «Боевая | Рядом с видео» поверх кадра -->
       <div class="nml-variant-switch nml-variant-switch-editor" id="nml-editor-switch"></div>
     </div>
     <aside class="nml-editor-side" id="nml-editor-side">
@@ -47,7 +47,7 @@
     </div>
   </div>
 
-  {# Диалог подтверждения внутри редактора (приведение типов, перезапись боевого JSON) #}
+  <!-- Диалог подтверждения внутри редактора (приведение типов, перезапись боевого JSON) -->
   <div class="nml-dialog hidden" id="nml-dialog" role="alertdialog" aria-modal="true">
     <div class="nml-dialog-box">
       <div class="nml-dialog-title" id="nml-dialog-title"></div>

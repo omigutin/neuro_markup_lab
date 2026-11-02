@@ -160,3 +160,12 @@ def test_list_videos_with_camera_resolver(workspace):
     video = service.list_videos(str(ws['videos']), False, str(ws['jsons'])).videos[0]
     assert (video.factory, video.cam_id) == (None, None)
     assert video.production.path is None and video.default_variant is None
+
+
+def test_video_entry(workspace):
+    ws = workspace(sidecar=True)
+    entry = MarkupLabService().video_entry(str(ws['video']), str(ws['jsons']))
+    assert entry.sidecar.exists and entry.production.exists and entry.relative_dir == ''
+    assert MarkupLabService().video_entry(str(ws['video']), '').production.path is None
+    with pytest.raises(MarkupError):
+        MarkupLabService().video_entry(str(ws['videos'] / 'none.avi'), '')

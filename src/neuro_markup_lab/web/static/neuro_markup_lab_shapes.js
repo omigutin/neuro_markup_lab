@@ -1,9 +1,20 @@
 // Общее для страницы и редактора NeuroMarkupLab: адреса API, SVG-геометрия фигур LabelMe,
 // подписи вариантов разметки, сообщения. Только представление: типы и сохранение решает сервер.
+//
+// Адреса API относительные и считаются от корня приложения редактора (BASE). BASE берётся из адреса
+// этого скрипта (<корень>/static/neuro_markup_lab_shapes.js), поэтому редактор работает и на своей
+// странице под любым префиксом, и в чужой странице. Если скрипты собраны в один файл, чужая
+// страница задаёт корень сама: window.NML_BASE = '/neuro-markup-lab/'.
 window.NML = window.NML || {};
 NML.common = (function () {
   var SVGNS = 'http://www.w3.org/2000/svg';
-  var ROOT = '/neuro-markup-lab';
+  var BASE = (function () {
+    if (window.NML_BASE) return String(window.NML_BASE).replace(/\/?$/, '/');
+    var script = document.currentScript;
+    var src = script && script.src ? script.src.split(/[?#]/)[0] : '';
+    var at = src.lastIndexOf('/static/');
+    return at >= 0 ? src.slice(0, at + 1) : '';
+  })();
   // Подписи вариантов разметки
   var VARIANT_LABELS = { production: 'Боевая', sidecar: 'Рядом с видео' };
   // Порядок кнопок переключателя вариантов
@@ -17,13 +28,16 @@ NML.common = (function () {
   function query(params) {
     return Object.keys(params).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k] == null ? '' : params[k]); }).join('&');
   }
-  function frameUrl(video, full) { return ROOT + '/frame?' + query({ video: video, full: full ? 1 : '' }); }
+  // Полный адрес: относительный ('api/markup') — от корня редактора, абсолютный ('/x', 'http://…') — как есть
+  function url(path) { return /^([a-z][a-z0-9+.-]*:|\/)/i.test(path) ? path : BASE + path; }
+  function withQuery(path, params) { return url(path) + (path.indexOf('?') >= 0 ? '&' : '?') + query(params); }
+  function frameUrl(video, full, path) { return withQuery(path || 'frame', { video: video, full: full ? 1 : '' }); }
   // GET JSON; ответ {ok:false,error} — reject с текстом ошибки
   function getJson(path, params) {
-    return fetch(ROOT + path + '?' + query(params)).then(parseJson);
+    return fetch(withQuery(path, params)).then(parseJson);
   }
   function postJson(path, body) {
-    return fetch(ROOT + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(parseJson);
+    return fetch(url(path), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(parseJson);
   }
   function parseJson(r) {
     return r.json().catch(function () { return { ok: false, error: 'HTTP ' + r.status }; }).then(function (d) {
@@ -94,7 +108,7 @@ NML.common = (function () {
 
   // Открыть JSON разметки видео в программе по умолчанию (на этом компьютере)
   function openFile(video, variant, jsonsDir) {
-    postJson('/api/open-file', { video: video, variant: variant, jsons_dir: jsonsDir || '' })
+    postJson('api/open-file', { video: video, variant: variant, jsons_dir: jsonsDir || '' })
       .then(function (d) { toast('Открываю ' + d.path); })
       .catch(function (err) { toast('Не удалось открыть файл: ' + err.message, true); });
   }
@@ -109,7 +123,8 @@ NML.common = (function () {
   }
 
   return {
-    SVGNS: SVGNS, VARIANT_LABELS: VARIANT_LABELS, esc: esc, frameUrl: frameUrl, getJson: getJson, postJson: postJson,
+    SVGNS: SVGNS, BASE: BASE, VARIANT_LABELS: VARIANT_LABELS, esc: esc, url: url, frameUrl: frameUrl,
+    getJson: getJson, postJson: postJson,
     createGeom: createGeom, updateGeom: updateGeom, isVisible: isVisible, buildOverlay: buildOverlay,
     renderSwitch: renderSwitch, toast: toast, openFile: openFile,
   };

@@ -7,6 +7,17 @@
 //    добавление и удаление полей. Тип поля один на все фигуры документа; приведение типов и
 //    запись выполняет сервер (сначала проверка dry_run, затем запись с подтверждением).
 //  * Переключатель «Боевая | Рядом с видео» поверх кадра открывает другой вариант разметки.
+//
+// Открытие из любой страницы (подключены neuro_markup_lab.css, _shapes.js и _editor.js):
+//   NML.editor.open({
+//     video: 'D:/video/plant_cam5.avi',  // путь к видео на компьютере сервера (обязательно)
+//     jsonsDir: 'D:/markup/plant',        // каталог боевых JSON; нет — только «рядом с видео»
+//     variant: 'sidecar',                 // 'sidecar' | 'production'; нет — «рядом с видео», если есть
+//     urls: { markup, save, frame, locations },  // свои адреса загрузки и сохранения; нет — адреса редактора
+//     onSaved: function (variant, location) {},
+//   });
+// Окно редактора вставляется в страницу при первом открытии. После сохранения на document
+// приходит событие 'nml:saved' с detail = {video, variant, location}.
 window.NML = window.NML || {};
 NML.editor = (function () {
   var C = NML.common, SVGNS = C.SVGNS, esc = C.esc;
@@ -38,7 +49,13 @@ NML.editor = (function () {
   // Подсказка для нового своего поля (у полей из схемы подсказку даёт сервер)
   var DOCUMENT_FIELD_HINT = 'Своё поле документа: в модели фигуры его нет, читается по имени.';
 
-  var ctx = null;            // {video, videoName, jsonsDir, entry, variant, onSaved}
+  // Адреса API по умолчанию (от корня редактора); ctx.urls их заменяет
+  var DEFAULT_URLS = { markup: 'api/markup', save: 'api/save', frame: 'frame', locations: 'api/locations' };
+  // Разметка окна редактора: вставляется в страницу при первом открытии
+  var EDITOR_HTML = 'static/neuro_markup_lab_editor.html';
+
+  var ctx = null;            // {video, videoName, jsonsDir, entry, variant, urls, onSaved}
+  var domReady = null;       // загрузка окна редактора (Promise)
   var doc = null;            // ответ /api/markup
   var known = {};            // известные поля модели фигуры: имя → spec
   var docFields = {};        // поля документа: имя → {type, nullable} (рабочие)
@@ -65,11 +82,48 @@ NML.editor = (function () {
 
   // ------------------------------------------------------------------ открыть / закрыть
   function open(context) {
-    ctx = context;
-    el('nml-editor-video').textContent = ctx.videoName || '';
-    el('nml-editor-video').title = ctx.video || '';
-    show();
-    load(ctx.variant);
+    ensureDom().then(function () {
+      ctx = Object.assign({}, context);
+      ctx.urls = Object.assign({}, DEFAULT_URLS, context.urls || {});
+      ctx.jsonsDir = ctx.jsonsDir || '';
+      ctx.videoName = ctx.videoName || String(ctx.video || '').split(/[\\/]/).pop();
+      el('nml-editor-video').textContent = ctx.videoName;
+      el('nml-editor-video').title = ctx.video || '';
+      show();
+      if (ctx.entry) { start(); return; }
+      el('nml-editor-canvas').innerHTML = '<div>Загрузка…</div>';
+      C.getJson(ctx.urls.locations, { video: ctx.video, jsons: ctx.jsonsDir }).then(function (d) {
+        ctx.entry = { sidecar: d.sidecar, production: d.production };
+        start();
+      }).catch(function (err) {
+        el('nml-editor-canvas').innerHTML = '<div>Не удалось найти разметку: ' + esc(err.message) + '</div>';
+      });
+    }).catch(function (err) { C.toast('Редактор не загрузился: ' + err.message, true); });
+  }
+  // Открыть вариант из ctx или вариант по умолчанию: «рядом с видео», если есть, иначе боевую
+  function start() {
+    var entry = ctx.entry;
+    var variant = ctx.variant
+      || (entry.sidecar && entry.sidecar.exists ? 'sidecar' : (entry.production && entry.production.exists ? 'production' : ''));
+    if (variant) { load(variant); return; }
+    el('nml-editor-canvas').innerHTML = '<div>Разметки нет: ни рядом с видео, ни боевой.</div>';
+    C.renderSwitch(el('nml-editor-switch'), entry, '', switchVariant);
+  }
+  // Окно редактора: уже в странице или загружается из статики редактора
+  function ensureDom() {
+    if (el('nml-editor')) { init(); return Promise.resolve(); }
+    if (!domReady) {
+      domReady = fetch(C.url(EDITOR_HTML)).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      }).then(function (html) {
+        var host = document.createElement('div');
+        host.innerHTML = html;
+        while (host.firstChild) document.body.appendChild(host.firstChild);
+        init();
+      }).catch(function (err) { domReady = null; throw err; });
+    }
+    return domReady;
   }
   function load(variant) {
     var seq = ++loadSeq;
@@ -77,7 +131,7 @@ NML.editor = (function () {
     svg = null; handlesLayer = null; shapes = []; selectedIndex = -1;
     el('nml-editor-canvas').innerHTML = '<div>Загрузка…</div>';
     el('nml-editor-source').textContent = '';
-    C.getJson('/api/markup', { video: ctx.video, variant: variant, jsons: ctx.jsonsDir }).then(function (d) {
+    C.getJson(ctx.urls.markup, { video: ctx.video, variant: variant, jsons: ctx.jsonsDir }).then(function (d) {
       if (seq !== loadSeq) return;
       doc = d;
       if (doc.location) ctx.entry[variant] = doc.location;
@@ -89,7 +143,7 @@ NML.editor = (function () {
       var probe = new Image();
       probe.onload = function () { if (seq !== loadSeq) return; W = probe.naturalWidth || FALLBACK_W; H = probe.naturalHeight || FALLBACK_H; startScene(); };
       probe.onerror = function () { if (seq !== loadSeq) return; W = FALLBACK_W; H = FALLBACK_H; startScene(); };
-      probe.src = C.frameUrl(ctx.video, true);
+      probe.src = C.frameUrl(ctx.video, true, ctx.urls.frame);
     }).catch(function (err) {
       if (seq !== loadSeq) return;
       doc = null;
@@ -202,7 +256,7 @@ NML.editor = (function () {
     image.setAttribute('x', 0); image.setAttribute('y', 0);
     image.setAttribute('width', W); image.setAttribute('height', H);
     image.setAttribute('preserveAspectRatio', 'none');
-    image.setAttribute('href', C.frameUrl(ctx.video, true));
+    image.setAttribute('href', C.frameUrl(ctx.video, true, ctx.urls.frame));
     svg.appendChild(image);
     shapes.forEach(function (sh) {
       var g = document.createElementNS(SVGNS, 'g');
@@ -897,7 +951,7 @@ NML.editor = (function () {
     if (!doc) return;
     if (target === ctx.variant && !isDirty() && !mismatches().length) { C.toast('Нет изменений для сохранения.'); return; }
     setSaving(true);
-    C.postJson('/api/save', payload(target, true)).then(function (check) {
+    C.postJson(ctx.urls.save, payload(target, true)).then(function (check) {
       setSaving(false);
       var report = check.report || {}, problems = report.problems || [], conversions = report.conversions || [];
       if (problems.length) {
@@ -928,12 +982,13 @@ NML.editor = (function () {
   }
   function commit(target, confirmProduction) {
     setSaving(true);
-    C.postJson('/api/save', payload(target, false, confirmProduction)).then(function (res) {
+    C.postJson(ctx.urls.save, payload(target, false, confirmProduction)).then(function (res) {
       setSaving(false);
       if (!res.saved) { C.toast('Разметка не сохранена.', true); return; }
       C.toast('Сохранено: ' + res.target.name);
       ctx.entry[target] = res.target;
       if (ctx.onSaved) ctx.onSaved(target, res.target);
+      document.dispatchEvent(new CustomEvent('nml:saved', { detail: { video: ctx.video, variant: target, location: res.target } }));
       load(target);
     }).catch(function (err) { setSaving(false); C.toast(err.message, true); });
   }
@@ -972,6 +1027,7 @@ NML.editor = (function () {
 
   // ------------------------------------------------------------------ init
   function init() {
+    if (modal) return;
     modal = el('nml-editor'); overlay = el('nml-editor-overlay');
     if (!modal) return;
     el('nml-editor-x').addEventListener('click', requestClose);
