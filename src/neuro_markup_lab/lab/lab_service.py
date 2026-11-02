@@ -97,6 +97,12 @@ class MarkupLabService:
         self._opener.open(location.path)
         return location.path
 
+    def open_video(self, video: str) -> Path:
+        """ Открывает видеофайл в программе по умолчанию (для просмотра). Открываются только видеофайлы. """
+        video_path = _video_path(video)
+        self._opener.open(video_path)
+        return video_path
+
     def save(self, request: SaveRequest) -> SaveResult:
         """
             Применяет правки к разметке ``base_variant``, приводит типы во всём документе и пишет

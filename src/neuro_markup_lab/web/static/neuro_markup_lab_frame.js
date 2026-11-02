@@ -1,7 +1,8 @@
 // Кадр видео с разметкой — модуль для любой страницы (своей и чужой): первый кадр, разметка поверх,
 // переключатель «Боевая | Рядом с видео», карандаш редактора и, по желанию, панель справа — файлы
-// разметки (ссылка, копирование пути, выбор боевой вручную) и содержимое разметки только для чтения:
-// объекты с координатами и атрибутами, поля документа.
+// разметки (клик выбирает показываемый вариант; ссылка, копирование пути, выбор боевой вручную), содержимое
+// разметки только для чтения (объекты с координатами и атрибутами, поля документа), «Открыть видео» и
+// «Открыть редактор разметки».
 //
 //   var frame = NML.frame.mount(element, {
 //     video: 'D:/video/line1_cam5.avi',  // путь к видео на компьютере сервера (обязательно)
@@ -158,24 +159,27 @@ NML.frame = (function () {
     }
 
     // ---- панель
+    // Карточка файла разметки: клик по карточке показывает этот вариант; ссылка открывает файл
     function fileCard(variant) {
       var loc = state.entry[variant] || {};
       var active = variant === state.variant;
-      var tags = (active ? '<span class="nml-tag nml-tag-active">показана</span>' : '')
-        + (loc.manual ? '<span class="nml-tag">выбрана вручную</span>' : '');
       var path = loc.exists
-        ? '<a href="#" class="nml-link" data-open-variant="' + variant + '" title="Открыть в программе по умолчанию">' + esc(loc.path) + '</a>'
-          + '<button type="button" class="nml-icon-btn" data-copy="' + esc(loc.path) + '" title="Копировать путь">' + COPY_ICON + '</button>'
+        ? '<button type="button" class="nml-icon-btn" data-copy="' + esc(loc.path) + '" title="Копировать путь">' + COPY_ICON + '</button>'
+          + '<a href="#" class="nml-link" data-open-variant="' + variant + '" title="Открыть в программе по умолчанию">' + esc(loc.path) + '</a>'
         : '<span class="muted">' + esc(loc.path ? 'нет файла ' + loc.name : (loc.reason || '—')) + '</span>';
       var actions = '';
       if (variant === 'production' && jsonsDir) {
-        actions = '<div class="nml-info-actions"><button type="button" class="nml-btn nml-btn-small" data-choose-production>Выбрать файл…</button>'
+        actions = '<span class="nml-info-actions">'
           + (loc.manual ? '<button type="button" class="nml-btn nml-btn-small" data-auto-production title="Вернуть подбор по каталогу">Подбирать автоматически</button>' : '')
-          + '</div>';
+          + '<button type="button" class="nml-btn nml-btn-small" data-choose-production>Выбрать файл…</button></span>';
       }
-      return '<div class="nml-info-file' + (active ? ' active' : '') + (loc.exists ? '' : ' missing') + '">'
-        + '<div class="nml-info-file-head"><b>' + esc(C.VARIANT_LABELS[variant]) + '</b>' + tags + '</div>'
-        + '<div class="nml-info-path">' + path + '</div>' + actions + '</div>';
+      var selectable = loc.exists && !active;
+      return '<div class="nml-info-file' + (active ? ' active' : '') + (loc.exists ? '' : ' missing') + (selectable ? ' selectable' : '') + '"'
+        + (selectable ? ' data-select-variant="' + variant + '" title="Показать эту разметку"' : '') + '>'
+        + '<div class="nml-info-file-head"><b>' + esc(C.VARIANT_LABELS[variant]) + '</b>'
+        + (loc.manual ? '<span class="nml-tag">выбрана вручную</span>' : '')
+        + (active ? '<span class="nml-tag nml-tag-active">выбрано</span>' : '') + '</div>'
+        + '<div class="nml-info-row"><div class="nml-info-path">' + path + '</div>' + actions + '</div></div>';
     }
     function summaryHtml(doc) {
       var shapes = doc.shapes || [];
@@ -238,7 +242,10 @@ NML.frame = (function () {
     function renderInfo() {
       info.innerHTML = '<section class="nml-info-sec"><div class="nml-info-h">Файлы разметки</div>'
         + '<div class="nml-info-files">' + VARIANTS.map(fileCard).join('') + '</div></section>'
-        + '<section class="nml-info-sec">' + contentHtml() + '</section>';
+        + '<section class="nml-info-sec">' + contentHtml() + '</section>'
+        + '<div class="nml-info-foot"><button type="button" class="nml-btn" data-open-video title="Открыть видео в программе по умолчанию">Открыть видео</button>'
+        + (o.editable ? '<button type="button" class="nml-btn nml-btn-primary" data-open-editor' + (state.variant ? '' : ' disabled') + '>Открыть редактор разметки</button>' : '')
+        + '</div>';
     }
 
     // ---- действия
@@ -297,7 +304,16 @@ NML.frame = (function () {
       var link = t.closest('[data-open-variant]');
       if (link) { e.preventDefault(); e.stopPropagation(); C.openFile(o.video, link.getAttribute('data-open-variant'), jsonsDir, state.key); return; }
       if (t.closest('[data-choose-production]')) { e.stopPropagation(); chooseProduction(); return; }
-      if (t.closest('[data-auto-production]')) { e.stopPropagation(); autoProduction(); }
+      if (t.closest('[data-auto-production]')) { e.stopPropagation(); autoProduction(); return; }
+      if (t.closest('[data-open-editor]')) { e.stopPropagation(); openEditor(); return; }
+      if (t.closest('[data-open-video]')) {
+        e.stopPropagation();
+        C.postJson('api/open-video', { video: o.video }).then(function (d) { C.toast('Открываю ' + d.path); })
+          .catch(function (err) { C.toast('Не удалось открыть видео: ' + err.message, true); });
+        return;
+      }
+      var card = t.closest('[data-select-variant]');
+      if (card) { e.stopPropagation(); setVariant(card.getAttribute('data-select-variant')); }
     }
     function onOver(e) {
       var obj = e.target.closest && e.target.closest('.nml-obj');

@@ -179,3 +179,11 @@ def test_locations_and_markup_with_manual_key(client, workspace):
     assert bad.status_code == 404
     markup = client.get(f'{PREFIX}/api/markup', params={**params, 'variant': 'production', 'key': 'line_a'}).json()
     assert markup['location']['key'] == 'line_a'
+
+
+def test_open_video_api(client, opener, workspace):
+    ws = workspace()
+    data = client.post(f'{PREFIX}/api/open-video', json={'video': str(ws['video'])}).json()
+    assert data['ok'] and opener.opened == [ws['video']]
+    assert client.post(f'{PREFIX}/api/open-video', json={'video': str(ws['production'])}).json()['ok'] is False
+    assert client.post(f'{PREFIX}/api/open-video', json={'video': 5}).json()['ok'] is False

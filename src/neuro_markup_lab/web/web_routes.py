@@ -148,6 +148,22 @@ async def open_markup_file(request: Request) -> JSONResponse:
     return JSONResponse({'ok': True, 'path': str(path)}, headers=_NO_STORE)
 
 
+@markup_lab_router.post('/api/open-video')
+async def open_video_file(request: Request) -> JSONResponse:
+    """ Открывает видеофайл в программе по умолчанию на этом компьютере. """
+    payload = await _json_object(request)
+    if isinstance(payload, JSONResponse):
+        return payload
+    video = payload.get('video')
+    if not isinstance(video, str):
+        return _error('Field "video" must be a string')
+    try:
+        path = await run_in_threadpool(_deps(request).service.open_video, video)
+    except MarkupError as exc:
+        return _error(str(exc))
+    return JSONResponse({'ok': True, 'path': str(path)}, headers=_NO_STORE)
+
+
 @markup_lab_router.post('/api/pick')
 async def pick_path(request: Request) -> JSONResponse:
     """ Системное окно выбора каталога (``kind: dir``) или JSON (``kind: json``); отмена — ``path: null``. """

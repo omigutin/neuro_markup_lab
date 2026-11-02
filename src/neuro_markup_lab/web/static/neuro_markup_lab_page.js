@@ -124,8 +124,7 @@
   function headHtml(v) {
     return '<div class="nml-video-head" data-toggle>'
       + '<span class="nml-caret">▸</span>'
-      + '<span class="nml-video-title"><span class="nml-video-name">' + esc(v.name) + '</span>'
-      + '<span class="nml-video-path" title="' + esc(v.path) + '">' + esc(v.path) + '</span></span>'
+      + '<span class="nml-video-name" title="' + esc(v.path) + '">' + esc(v.name) + '</span>'
       + badge(v, 'sidecar', 'рядом с видео') + badge(v, 'production', 'боевая')
       + '</div>';
   }
@@ -166,14 +165,11 @@
     if (!v) return;
     var badgeEl = e.target.closest('[data-badge]');
     if (badgeEl && (v[badgeEl.getAttribute('data-badge')] || {}).exists) {
-      // Клик по бейджу показывает этот вариант (карточка раскрывается, если закрыта)
+      // Клик по бейджу выбирает показываемый вариант; карточку не раскрывает и не сворачивает
       e.stopPropagation();
       v.cardVariant = badgeEl.getAttribute('data-badge');
-      if (v.open && v.frame) { v.frame.setVariant(v.cardVariant); refreshHead(v); return; }
-      v.open = true;
-      card.classList.add('open');
+      if (v.open && v.frame) v.frame.setVariant(v.cardVariant);
       refreshHead(v);
-      renderBody(v);
       return;
     }
     if (e.target.closest('[data-toggle]')) {

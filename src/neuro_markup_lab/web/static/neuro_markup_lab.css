@@ -45,11 +45,9 @@ body.nml-body { margin: 0; font-family: Arial, Helvetica, sans-serif; background
 .nml-video-head:hover { background: #f8f9fa; border-radius: 10px; }
 .nml-caret { width: 12px; color: var(--nml-muted); transition: transform .12s; flex: 0 0 auto; }
 .nml-video.open .nml-caret { transform: rotate(90deg); }
-.nml-video-title { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 12px; overflow: hidden; }
-.nml-video-name { font-weight: 600; flex: 0 0 auto; white-space: nowrap; }
-.nml-video-path { color: var(--nml-muted); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nml-video-name { font-weight: 600; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nml-video-cam { color: var(--nml-muted); font-size: 12px; flex: 0 0 auto; }
-.nml-badge { font-size: 11px; border-radius: 10px; padding: 2px 8px; border: 1px solid var(--nml-border); color: var(--nml-muted); flex: 0 0 auto; }
+.nml-badge { width: 112px; box-sizing: border-box; text-align: center; font-size: 11px; border-radius: 10px; padding: 2px 8px; border: 1px solid var(--nml-border); color: var(--nml-muted); flex: 0 0 auto; }
 .nml-badge.on { border-color: #c7d4b0; background: var(--nml-accent-soft); color: var(--nml-accent); cursor: pointer; }
 .nml-badge.on:hover { border-color: var(--nml-accent); }
 .nml-badge.active { background: var(--nml-accent); border-color: var(--nml-accent); color: #fff; font-weight: 600; }
@@ -207,10 +205,15 @@ details > summary.nml-side-h { cursor: pointer; }
 .nml-info-file { display: flex; flex-direction: column; gap: 4px; padding: 9px 12px; border: 1px solid var(--nml-border); border-radius: 10px; background: #fafbfc; }
 .nml-info-file.active { border-color: var(--nml-accent); background: var(--nml-accent-soft); box-shadow: inset 3px 0 0 var(--nml-accent); }
 .nml-info-file.missing { background: #fff; }
+.nml-info-file.selectable { cursor: pointer; }
+.nml-info-file.selectable:hover { border-color: var(--nml-accent); }
 .nml-info-file-head { display: flex; align-items: center; gap: 6px; }
-.nml-info-path { display: flex; align-items: flex-start; gap: 6px; word-break: break-all; }
-.nml-info-path .nml-link { flex: 0 1 auto; min-width: 0; }
-.nml-info-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.nml-info-file-head .nml-tag-active { margin-left: auto; }
+.nml-info-row { display: flex; align-items: center; gap: 10px; }
+.nml-info-path { flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-start; gap: 6px; word-break: break-all; }
+.nml-info-path .nml-link { min-width: 0; }
+.nml-info-actions { flex: 0 0 auto; display: flex; gap: 6px; margin-left: auto; }
+.nml-info-foot { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding-top: 4px; border-top: 1px solid var(--nml-border); margin-top: 4px; padding-top: 12px; }
 .nml-icon-btn { flex: 0 0 auto; width: 24px; height: 22px; padding: 0; border: 1px solid var(--nml-border-strong); border-radius: 6px; background: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .nml-icon-btn svg { width: 13px; height: 13px; fill: none; stroke: #4b5563; stroke-width: 1.4; }
 .nml-icon-btn:hover { border-color: var(--nml-accent); }
