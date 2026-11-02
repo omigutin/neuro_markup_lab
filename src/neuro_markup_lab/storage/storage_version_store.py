@@ -81,12 +81,17 @@ class VersionStore:
             Сохраняет документ: новой версией (``NEW_VERSION``) или поверх ``base_version`` (``OVERWRITE``).
             Сохранённая версия становится текущей, файл рядом с видео — равен ей. ``origin`` — откуда новая
             версия (``EDITOR`` из редактора, ``SYNC`` — синхронизация приложением-хозяином).
+            Файл рядом с видео без истории версий считается версией v1: ``OVERWRITE`` без ``base_version``
+            перезаписывает его и делает v1 (прежнее содержимое отдельной версией не сохраняется).
         """
-        history = self._capture_working(self.history())
+        history = self.history()
+        overwrite_unversioned = mode == SaveMode.OVERWRITE and base_version is None and not history.versions
+        if not overwrite_unversioned:
+            history = self._capture_working(history)
         text = dump_json_document(document)
         now = _now()
         target = history.get(base_version) if mode == SaveMode.OVERWRITE and base_version is not None else None
-        if mode == SaveMode.OVERWRITE and target is None:
+        if mode == SaveMode.OVERWRITE and target is None and not overwrite_unversioned:
             raise MarkupError(f'Markup version {base_version} not found for overwrite')
         if target is not None:
             write_json_text(self.directory / target.file, text)

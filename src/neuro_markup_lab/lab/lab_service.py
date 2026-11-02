@@ -16,6 +16,7 @@ from ..storage import (
     MarkupVariant,
     MarkupVersion,
     ProductionMarkupSource,
+    SaveMode,
     SidecarMarkupSource,
     VersionHistory,
     VersionStore,
@@ -112,12 +113,19 @@ class MarkupLabService:
                           versions_count=count)
 
     def open_file(self, video: str, variant: MarkupVariant, jsons_dir: str,
-                  production_key: str | None = None) -> Path:
+                  production_key: str | None = None, version: int | None = None) -> Path:
         """
-            Открывает файл разметки видео в программе по умолчанию. Открывается только путь,
-            вычисленный источником для этого видео, — произвольный путь из запроса не принимается.
+            Открывает файл разметки видео в программе по умолчанию: файл варианта или, для разметки рядом
+            с видео, файл версии ``version``. Открывается только путь, вычисленный для этого видео, —
+            произвольный путь из запроса не принимается.
         """
         video_path = _video_path(video)
+        if version is not None:
+            if variant != MarkupVariant.SIDECAR:
+                raise MarkupError('Only markup beside the video has versions')
+            path = self.version_path(video, version)
+            self._opener.open(path)
+            return path
         jsons_path, _error = _resolve_jsons_dir(jsons_dir)
         location = self._sources(jsons_path, production_key)[variant].locate(video_path)
         if not location.exists or location.path is None:
@@ -162,7 +170,9 @@ class MarkupLabService:
             raise MarkupConflictError(f'Markup file was changed after it was opened: {target.path}')
         version: MarkupVersion | None = None
         if request.target_variant == MarkupVariant.SIDECAR:
-            based_on = request.base_version if request.base_variant == MarkupVariant.SIDECAR else None
+            # Перезаписывается base_version — и когда правили её саму, и когда в неё пишут правку боевой
+            overwrite = request.mode == SaveMode.OVERWRITE
+            based_on = request.base_version if request.base_variant == MarkupVariant.SIDECAR or overwrite else None
             version = VersionStore(video_path).save(document, request.mode, based_on,
                                                     request.base_variant.value, request.comment)
         else:
@@ -173,6 +183,22 @@ class MarkupLabService:
     def versions(self, video: str) -> VersionHistory:
         """ Версии разметки рядом с видео и текущая. """
         return VersionStore(_video_path(video)).history()
+
+    def versions_directory(self, video: str) -> Path:
+        """ Папка версий разметки рядом с видео. """
+        return VersionStore(_video_path(video)).directory
+
+    def working_matches_current(self, video: str) -> bool:
+        """ Файл рядом с видео равен текущей версии (не изменён вне версий). """
+        return VersionStore(_video_path(video)).working_matches_current()
+
+    def version_path(self, video: str, number: int) -> Path:
+        """ Файл версии ``number`` разметки рядом с видео. Нет версии — :class:`MarkupError`. """
+        store = VersionStore(_video_path(video))
+        version = store.history().get(number)
+        if version is None:
+            raise MarkupError(f'Markup version {number} not found')
+        return store.directory / version.file
 
     def make_current_version(self, video: str, number: int) -> MarkupVersion:
         """ Делает версию текущей: файл рядом с видео становится равен ей. """

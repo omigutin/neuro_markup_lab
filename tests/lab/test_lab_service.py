@@ -239,6 +239,22 @@ def test_sidecar_save_creates_versions(workspace):
         service.open(str(ws['video']), MarkupVariant.PRODUCTION, str(ws['jsons']), version=1)
 
 
+def test_overwrite_current_version_from_production(workspace):
+    from neuro_markup_lab.storage import SaveMode
+    ws = workspace(sidecar=False)
+    service = MarkupLabService()
+    service.save(_save(ws))
+    service.save(_save(ws, changes={0: ShapeChange(points=[[1, 1], [2, 2]])}))
+    result = service.save(_save(ws, mode=SaveMode.OVERWRITE, base_version=2))
+    assert result.version.number == 2 and service.versions(str(ws['video'])).current == 2
+    assert read_json(ws['sidecar'])['shapes'][0]['points'] == [[10, 20], [110, 220]]
+    assert len(service.versions(str(ws['video'])).versions) == 2
+    assert service.version_path(str(ws['video']), 1).parent == service.versions_directory(str(ws['video']))
+    assert service.working_matches_current(str(ws['video']))
+    with pytest.raises(MarkupError):
+        service.version_path(str(ws['video']), 9)
+
+
 def test_conflict_when_file_changed(workspace):
     from neuro_markup_lab.lab import MarkupConflictError
     ws = workspace(sidecar=True)

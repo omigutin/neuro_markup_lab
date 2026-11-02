@@ -149,7 +149,11 @@ NML.editor = (function () {
       if (doc.location) ctx.entry[variant] = doc.location;
       buildModel();
       renderHeader();
+      renderSwitch();
       renderSaveButtons();
+      // Версии рядом с видео нужны и при открытой боевой: «Сохранить текущую» пишет в текущую версию
+      if (sidecarExists()) refreshVersions();
+      else { versions = null; el('nml-versions').classList.add('hidden'); }
       W = doc.image_width || 0; H = doc.image_height || 0;
       if (W && H) { startScene(); return; }
       var probe = new Image();
@@ -683,32 +687,35 @@ NML.editor = (function () {
     renderDocFields();
     applySelection();
   }
-  // Шапка: открытая разметка (цвет варианта, версия) и полный путь к её JSON ссылкой
+  // Шапка: открытая разметка (цвет варианта, версия) и полный путь к её JSON ссылкой: у разметки рядом
+  // с видео — файл открытой версии (в папке версий), файл без истории версий — сам файл рядом с видео (v1)
   function renderHeader() {
     var loc = doc.location || {};
-    var version = '';
+    var path = loc.path || loc.name || '', link = '';
+    var label = esc(C.VARIANT_LABELS[ctx.variant]);
     if (ctx.variant === 'sidecar') {
-      if (doc.markup_version != null) version = ' · v' + doc.markup_version;
-      else if (doc.versions_count) version = ' · <span class="nml-warn-text">изменён вне версий — сохранится новой версией</span>';
+      var n = doc.markup_version, v = n != null ? versionByNumber(n) : null;
+      if (v && versions && versions.directory) {
+        path = versions.directory + (String(loc.path || '').indexOf('\\') >= 0 ? '\\' : '/') + v.file;
+        link = ' data-open-version="' + n + '"';
+      }
+      label += n != null ? ' · v' + n : doc.versions_count
+        ? ' · <span class="nml-warn-text">изменён вне версий — сохранится новой версией</span>' : ' · v1';
     }
-    el('nml-editor-source').innerHTML = '<b class="nml-v-' + esc(ctx.variant) + '">' + esc(C.VARIANT_LABELS[ctx.variant]) + version + '</b> '
-      + '<a href="#" class="nml-link" data-open-variant="' + esc(ctx.variant) + '" title="Открыть в программе по умолчанию">'
-      + esc(loc.path || loc.name || '') + '</a>';
-    renderSwitch();
-    if (ctx.variant === 'sidecar' && doc.versions_count) refreshVersions();
-    else { versions = null; el('nml-versions').classList.add('hidden'); }
+    el('nml-editor-source').innerHTML = '<b class="nml-v-' + esc(ctx.variant) + '">' + label + '</b> '
+      + '<a href="#" class="nml-link" data-open-variant="' + esc(ctx.variant) + '"' + link + ' title="Открыть в программе по умолчанию">'
+      + esc(path) + '</a>';
   }
-  // Переключатель вариантов и, для разметки рядом с видео с версиями, кнопка версии «vN ▾»
+  // Переключатель вариантов и, для разметки рядом с видео, кнопка версии «vN ▾» (без истории версий — v1)
   function renderSwitch() {
     var host = el('nml-editor-switch');
     C.renderSwitch(host, ctx.entry, ctx.variant, switchVariant);
-    // Кнопка версии — всегда, когда открыта разметка рядом с видео; версий нет — «без версий»
     if (!doc || ctx.variant !== 'sidecar') return;
     var n = doc.markup_version;
     var v = n != null ? versionByNumber(n) : null;
-    var label = n != null ? 'v' + n : doc.versions_count ? 'вне версий' : 'без версий';
+    var label = n != null ? 'v' + n : doc.versions_count ? 'вне версий' : 'v1';
     var title = n != null ? 'v' + n + (v && v.comment ? ' — ' + v.comment : '') + '. Выбрать версию'
-      : doc.versions_count ? 'Файл изменён вне версий' : 'Версий нет: первая появится при сохранении';
+      : doc.versions_count ? 'Файл изменён вне версий' : 'v1 — единственная версия';
     host.insertAdjacentHTML('beforeend', '<button type="button" class="nml-ver-seg" data-ver-toggle title="' + esc(title) + '">'
       + label + ' ▾</button>');
     var seg = host.querySelector('[data-ver-toggle]');
@@ -717,28 +724,41 @@ NML.editor = (function () {
     var prod = host.querySelector('[data-variant="production"]');
     if (prod && prod.offsetWidth) seg.style.minWidth = prod.offsetWidth + 'px';
   }
-  // Кнопка «в боевой JSON» неактивна, если путь боевого JSON не определён; «в версию» — только для открытой версии
+  function sidecarExists() { return !!(ctx.entry && (ctx.entry.sidecar || {}).exists); }
+  // Кнопки сохранения: «Сохранить в боевой JSON» — если путь боевого JSON известен; «Создать новую версию»;
+  // «Сохранить текущую» — только когда файл рядом с видео есть
   function renderSaveButtons() {
     var prod = el('nml-save-production'), loc = ctx.entry.production || {};
     prod.disabled = !loc.path;
     prod.title = loc.path ? loc.path : (loc.reason || '');
     el('nml-save-sidecar').disabled = !(ctx.entry.sidecar || {}).path;
     var save = el('nml-save-current'), target = currentTarget();
-    save.disabled = !doc || !target;
-    save.title = !target ? '' : target.variant === 'production' ? 'Перезаписать боевой JSON'
-      : target.mode === 'overwrite' ? 'Перезаписать версию v' + openVersion() + ' разметки рядом с видео'
-        : 'Сохранить новой версией разметки рядом с видео';
+    save.classList.toggle('hidden', !sidecarExists());
+    save.disabled = !target;
+    save.title = !target ? '' : target.mode === 'new' ? 'Файл рядом с видео изменён вне версий — сохранится новой версией'
+      : target.version == null ? 'Перезаписать файл рядом с видео; он станет версией v1'
+        : 'Перезаписать текущую версию v' + target.version + (ctx.variant === 'production' ? ' разметкой из боевой' : '');
   }
-  // Куда сохраняет «Сохранить»: в открытую версию, в боевой JSON или — файл вне версий — новой версией
+  // «Сохранить текущую» всегда пишет в разметку рядом с видео: в открытую (она же текущая) версию;
+  // при открытой боевой — в текущую версию рядом с видео; файл без истории версий становится v1;
+  // файл, изменённый вне версий, — новой версией
   function currentTarget() {
-    if (!doc || !ctx.variant) return null;
-    if (ctx.variant === 'production') return (ctx.entry.production || {}).path ? { variant: 'production' } : null;
-    return { variant: 'sidecar', mode: openVersion() != null ? 'overwrite' : 'new' };
+    if (!doc || !ctx.variant || !sidecarExists()) return null;
+    if (ctx.variant === 'sidecar') {
+      var n = openVersion();
+      if (n != null) return { mode: 'overwrite', version: n };
+      return doc.versions_count ? { mode: 'new', version: null } : { mode: 'overwrite', version: null };
+    }
+    if (!versions) return null;
+    if (!(versions.versions || []).length) return { mode: 'overwrite', version: null };
+    if (!versions.working_matches) return { mode: 'new', version: null };
+    return { mode: 'overwrite', version: versions.current };
   }
   function saveCurrent() {
     var target = currentTarget();
-    if (target) doSave(target.variant, target.mode);
+    if (target) doSave('sidecar', target.mode, target.version);
   }
+
   // Открытая версия разметки рядом с видео (null — открыта боевая или файл вне истории версий)
   function openVersion() { return doc && ctx.variant === 'sidecar' && doc.markup_version != null ? doc.markup_version : null; }
   function renderDocInfo() {
@@ -974,7 +994,8 @@ NML.editor = (function () {
     var link = e.target.closest && e.target.closest('[data-open-variant]');
     if (!link) return;
     e.preventDefault();
-    C.openFile(ctx.video, link.getAttribute('data-open-variant'), ctx.jsonsDir, ctx.productionKey);
+    var version = link.getAttribute('data-open-version');
+    C.openFile(ctx.video, link.getAttribute('data-open-variant'), ctx.jsonsDir, ctx.productionKey, version ? +version : null);
   }
 
   // ------------------------------------------------------------------ вариант
@@ -1001,7 +1022,8 @@ NML.editor = (function () {
       if (f.type !== 'any' && ATTRIBUTE_NAME_RE.test(name) && JSON.stringify(f) !== JSON.stringify(originalDocFields[name])) fields[name] = f;
     });
     return { video: ctx.video, jsons_dir: ctx.jsonsDir, production_key: ctx.productionKey || null,
-      base_variant: ctx.variant, target_variant: target, base_version: openVersion(),
+      base_variant: ctx.variant, target_variant: target,
+      base_version: opts.baseVersion !== undefined ? opts.baseVersion : openVersion(),
       mode: opts.mode || 'new', comment: opts.comment || '', force: !!opts.force,
       // Защита от чужих правок: файл назначения должен быть таким, каким его открыли
       expected_hash: target === ctx.variant ? (doc.file_hash || null) : null,
@@ -1012,13 +1034,16 @@ NML.editor = (function () {
     else renderSaveButtons();
   }
   // target: 'sidecar' | 'production'; mode для «рядом с видео»: 'new' — новая версия, 'overwrite' — в открытую версию
-  function doSave(target, mode) {
+  // version — перезаписываемая версия рядом с видео (для mode 'overwrite'); не задана — открытая
+  function doSave(target, mode, version) {
     if (!doc) return;
     mode = mode || 'new';
+    var overwriteVersion = version !== undefined ? version : openVersion();
+    var saveOpts = { baseVersion: overwriteVersion };
     var unchanged = !isDirty() && !mismatches().length;
     if (unchanged && target === ctx.variant && (target === 'production' || mode === 'overwrite')) { C.toast('Нет изменений для сохранения.'); return; }
     setSaving(true);
-    C.postJson(ctx.urls.save, payload(target, true)).then(function (check) {
+    C.postJson(ctx.urls.save, payload(target, true, false, saveOpts)).then(function (check) {
       setSaving(false);
       var report = check.report || {}, problems = report.problems || [], conversions = report.conversions || [];
       if (problems.length) {
@@ -1032,8 +1057,10 @@ NML.editor = (function () {
       var production = target === 'production';
       var body = '';
       if (!production) {
-        var what = mode === 'overwrite' ? 'Будет перезаписана версия <b>v' + openVersion() + '</b>; она станет текущей.'
-          : 'Будет создана новая версия разметки рядом с видео; она станет текущей.';
+        var fromProduction = ctx.variant === 'production' ? ' разметкой из боевой' : '';
+        var what = mode !== 'overwrite' ? 'Будет создана новая версия разметки рядом с видео; она станет текущей.'
+          : overwriteVersion == null ? 'Файл рядом с видео будет перезаписан' + fromProduction + '; он станет версией <b>v1</b>.'
+            : 'Текущая версия <b>v' + overwriteVersion + '</b> будет заменена' + fromProduction + '.';
         body += '<div>' + what + '</div><label class="nml-dialog-label">Комментарий к версии (необязательно)'
           + '<input type="text" class="nml-input" id="nml-save-comment" maxlength="300" autocomplete="off"></label>';
       }
@@ -1048,10 +1075,11 @@ NML.editor = (function () {
               + esc(shortValue(c.before)) + ' → ' + esc(shortValue(c.after)) + '</li>';
           }).join('') + '</ul>';
       }
-      var title = production ? 'Записать боевой JSON?' : (mode === 'overwrite' ? 'Сохранить в v' + openVersion() + '?' : 'Сохранить новую версию?');
+      var title = production ? 'Записать боевой JSON?' : (mode === 'overwrite'
+        ? 'Сохранить текущую (v' + (overwriteVersion == null ? 1 : overwriteVersion) + ')?' : 'Создать новую версию?');
       confirmDialog(title, body, production ? 'Записать' : 'Сохранить', function () {
         var comment = el('nml-save-comment') ? el('nml-save-comment').value.trim() : '';
-        commit(target, production, { mode: mode, comment: comment });
+        commit(target, production, { mode: mode, comment: comment, baseVersion: overwriteVersion });
       });
       if (el('nml-save-comment')) el('nml-save-comment').focus();
     }).catch(function (err) { setSaving(false); C.toast(err.message, true); });
@@ -1095,7 +1123,7 @@ NML.editor = (function () {
     if (!versions) panel.innerHTML = '<div class="muted nml-versions-empty">Загрузка…</div>';
     C.getJson(ctx.urls.versions, { video: ctx.video }).then(function (d) {
       versions = d;
-      renderSwitch();
+      if (doc) { renderHeader(); renderSwitch(); renderSaveButtons(); }
       renderVersions();
     }).catch(function (err) { panel.innerHTML = '<div class="nml-error-text nml-versions-empty">' + esc(err.message) + '</div>'; });
   }
@@ -1110,7 +1138,12 @@ NML.editor = (function () {
   function renderVersions() {
     var panel = el('nml-versions');
     var list = ((versions && versions.versions) || []).slice().reverse();
-    if (!list.length) { panel.innerHTML = '<div class="muted nml-versions-empty">Версий пока нет: они появятся при сохранении рядом с видео.</div>'; return; }
+    // Файл рядом с видео без истории версий — единственная версия v1, выбирать не из чего
+    if (!list.length) {
+      panel.innerHTML = '<div class="nml-versions-list"><div class="nml-ver nml-ver-single"><span class="nml-ver-pin">★</span>'
+        + '<b class="nml-ver-n">v1</b><span class="muted nml-ver-meta"></span><span class="muted">единственная версия</span></div></div>';
+      return;
+    }
     panel.innerHTML = '<div class="nml-versions-list">' + list.map(function (v) {
       var comment = v.comment ? esc(v.comment) : (ORIGIN_LABELS[v.origin] ? '<span class="muted">' + esc(ORIGIN_LABELS[v.origin]) + '</span>' : '');
       return '<div class="nml-ver" data-ver="' + v.number + '" title="Сделать текущей и открыть">'

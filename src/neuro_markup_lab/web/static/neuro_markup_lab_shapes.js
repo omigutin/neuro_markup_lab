@@ -110,9 +110,11 @@ NML.common = (function () {
     };
   }
 
-  // Открыть JSON разметки видео в программе по умолчанию (на этом компьютере)
-  function openFile(video, variant, jsonsDir, productionKey) {
-    postJson('api/open-file', { video: video, variant: variant, jsons_dir: jsonsDir || '', production_key: productionKey || null })
+  // Открыть JSON разметки видео в программе по умолчанию (на этом компьютере); version — файл версии
+  // разметки рядом с видео
+  function openFile(video, variant, jsonsDir, productionKey, version) {
+    postJson('api/open-file', { video: video, variant: variant, jsons_dir: jsonsDir || '', production_key: productionKey || null,
+                                version: version == null ? null : version })
       .then(function (d) { toast('Открываю ' + d.path); })
       .catch(function (err) { toast('Не удалось открыть файл: ' + err.message, true); });
   }

@@ -152,11 +152,13 @@ async def open_markup_file(request: Request) -> JSONResponse:
     except ValueError:
         return _error('Unknown markup variant')
     video, jsons_dir = payload.get('video'), payload.get('jsons_dir') or ''
-    key = payload.get('production_key') or None
+    key, version = payload.get('production_key') or None, payload.get('version')
     if not isinstance(video, str) or not isinstance(jsons_dir, str) or not isinstance(key, (str, type(None))):
         return _error('Fields "video", "jsons_dir" and "production_key" must be strings')
+    if isinstance(version, bool) or not isinstance(version, (int, type(None))):
+        return _error('Field "version" must be an integer')
     try:
-        path = await run_in_threadpool(_deps(request).service.open_file, video, variant, jsons_dir, key)
+        path = await run_in_threadpool(_deps(request).service.open_file, video, variant, jsons_dir, key, version)
     except MarkupError as exc:
         return _error(str(exc))
     return JSONResponse({'ok': True, 'path': str(path)}, headers=_NO_STORE)
@@ -164,12 +166,18 @@ async def open_markup_file(request: Request) -> JSONResponse:
 
 @markup_lab_router.get('/api/versions')
 def list_versions(request: Request) -> JSONResponse:
-    """ Версии разметки рядом с видео и текущая. """
+    """
+        Версии разметки рядом с видео и текущая; ``directory`` — папка версий, ``working_matches`` — файл
+        рядом с видео равен текущей версии (не изменён вне версий).
+    """
+    service, video = _deps(request).service, _param(request, 'video')
     try:
-        history = _deps(request).service.versions(_param(request, 'video'))
+        history = service.versions(video)
+        directory, matches = service.versions_directory(video), service.working_matches_current(video)
     except MarkupError as exc:
         return _error(str(exc), status=404)
-    return JSONResponse({'ok': True, **history.as_dict()}, headers=_NO_STORE)
+    return JSONResponse({'ok': True, **history.as_dict(), 'directory': str(directory), 'working_matches': matches},
+                        headers=_NO_STORE)
 
 
 @markup_lab_router.post('/api/versions/current')

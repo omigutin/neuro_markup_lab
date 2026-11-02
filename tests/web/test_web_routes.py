@@ -165,6 +165,8 @@ def test_open_file_api(client, opener, workspace):
     assert client.post(f'{PREFIX}/api/open-file', json={**body, 'variant': 'x'}).json()['ok'] is False
     assert client.post(f'{PREFIX}/api/open-file', json={**body, 'variant': 'sidecar'}).json()['ok'] is False
     assert client.post(f'{PREFIX}/api/open-file', json=[1]).json()['ok'] is False
+    assert client.post(f'{PREFIX}/api/open-file', json={**body, 'version': 'x'}).json()['ok'] is False
+    assert client.post(f'{PREFIX}/api/open-file', json={**body, 'version': 1}).json()['ok'] is False
 
 
 def test_locations_and_markup_with_manual_key(client, workspace):
@@ -189,7 +191,7 @@ def test_open_video_api(client, opener, workspace):
     assert client.post(f'{PREFIX}/api/open-video', json={'video': 5}).json()['ok'] is False
 
 
-def test_versions_api(client, workspace):
+def test_versions_api(client, opener, workspace):
     ws = workspace(sidecar=False)
     body = {'video': str(ws['video']), 'jsons_dir': str(ws['jsons']), 'base_variant': 'production',
             'target_variant': 'sidecar', 'comment': 'первая'}
@@ -197,7 +199,11 @@ def test_versions_api(client, workspace):
     assert client.post(f'{PREFIX}/api/save', json={**body, 'base_variant': 'sidecar', 'base_version': 1}).json()['ok']
     data = client.get(f'{PREFIX}/api/versions', params={'video': str(ws['video'])}).json()
     assert data['current'] == 2 and [v['number'] for v in data['versions']] == [1, 2]
-    assert data['versions'][0]['comment'] == 'первая'
+    assert data['versions'][0]['comment'] == 'первая' and data['working_matches'] is True
+    assert data['directory'].endswith('_jsons')
+    version_body = {'video': str(ws['video']), 'variant': 'sidecar', 'version': 1}
+    assert client.post(f'{PREFIX}/api/open-file', json=version_body).json()['ok']
+    assert opener.opened[-1].parent.name.endswith('_jsons') and opener.opened[-1].name.startswith('v1_')
     one = client.get(f'{PREFIX}/api/markup', params={'video': str(ws['video']), 'variant': 'sidecar', 'version': 1})
     assert one.json()['markup_version'] == 1 and one.json()['current_version'] == 2
     assert client.post(f'{PREFIX}/api/versions/current', json={'video': str(ws['video']), 'number': 1}).json()['ok']

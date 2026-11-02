@@ -110,7 +110,7 @@ body.nml-body { margin: 0; font-family: Arial, Helvetica, sans-serif; background
   display: flex; align-items: center; justify-content: center; overflow: hidden; color: #9ca3af; }
 .nml-modal-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--nml-border); }
 /* «Отмена» и «Сохранить» одной ширины */
-#nml-editor-cancel, #nml-save-current { width: 130px; }
+#nml-editor-cancel, #nml-save-current { width: 160px; }
 .nml-save-box { display: flex; align-items: center; gap: 8px; }
 
 /* ---- сцена */
@@ -212,7 +212,7 @@ details > summary.nml-side-h { cursor: pointer; }
 .nml-info-sec { display: flex; flex-direction: column; gap: 8px; }
 .nml-info-h { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--nml-muted); margin-top: 4px; }
 .nml-info-files { display: grid; grid-template-columns: 1fr; gap: 8px; }
-.nml-info-file { display: flex; align-items: stretch; gap: 10px; padding: 9px 9px 9px 12px; border: 1px solid var(--nml-border); border-radius: 10px;
+.nml-info-file { position: relative; display: flex; align-items: stretch; gap: 10px; padding: 9px 9px 9px 12px; border: 1px solid var(--nml-border); border-radius: 10px;
   background: #fafbfc; box-shadow: inset 3px 0 0 var(--nml-v-line); }
 .nml-info-file.active { border-color: var(--nml-v); background: var(--nml-v-soft); box-shadow: inset 3px 0 0 var(--nml-v); }
 .nml-info-file.missing { background: #fff; box-shadow: none; }
@@ -227,6 +227,12 @@ details > summary.nml-side-h { cursor: pointer; }
 .nml-info-open svg { width: 20px; height: 20px; fill: none; stroke: #4b5563; stroke-width: 1.6; stroke-linejoin: round; }
 .nml-info-open:hover { border-color: var(--nml-v); }
 .nml-info-open:hover svg { stroke: var(--nml-v); }
+.nml-info-open { flex-direction: column; gap: 2px; }
+.nml-info-open-ver { font-size: 11px; font-weight: 700; color: var(--nml-v); line-height: 1; }
+/* Список версий у карточки «Рядом с видео»: прижат к правому краю карточки, не выходит за экран */
+.nml-vsel-list.nml-vsel-card { top: calc(100% + 4px); left: auto; right: 0; width: min(460px, calc(100vw - 32px)); max-width: none; max-height: 320px; }
+.nml-vsel-single { cursor: default; }
+.nml-vsel-single:hover { background: transparent; }
 .nml-info-path { flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-start; gap: 6px; word-break: break-all; }
 .nml-info-path .nml-link { min-width: 0; }
 /* Кнопки панели — в правом нижнем углу карточки; одинаковой ширины */
@@ -283,6 +289,7 @@ details > summary.nml-side-h { cursor: pointer; }
 .nml-ver { display: grid; grid-template-columns: 20px 34px max-content minmax(0, 1fr); align-items: center; gap: 10px;
   padding: 6px 8px; border-radius: 8px; cursor: pointer; }
 .nml-ver:hover { background: #f3f4f6; }
+.nml-ver-single, .nml-ver-single:hover { cursor: default; background: transparent; }
 .nml-ver-pin { border: 0; background: transparent; cursor: pointer; font-size: 15px; line-height: 1; color: #d1d5db; padding: 0 2px; }
 .nml-ver-pin.on { color: #f5b301; }
 .nml-ver-pin:hover { color: #f5b301; }

@@ -77,6 +77,16 @@ def test_crlf_working_file_matches_current(store):
     assert store.working_matches_current(history) and history.current == 2
 
 
+def test_overwrite_unversioned_file_becomes_v1(store):
+    store.working_path.write_text(json.dumps(doc(7)), encoding='utf-8')
+    version = store.save(doc(8), SaveMode.OVERWRITE)
+    history = store.history()
+    assert version.number == 1 and [v.number for v in history.versions] == [1] and history.current == 1
+    assert store.load(1) == doc(8) and store.working_matches_current(history)
+    with pytest.raises(MarkupError):
+        store.save(doc(9), SaveMode.OVERWRITE)
+
+
 def test_external_change_is_kept(store):
     store.save(doc(1), SaveMode.NEW_VERSION)
     store.working_path.write_text(json.dumps(doc(5)), encoding='utf-8')
