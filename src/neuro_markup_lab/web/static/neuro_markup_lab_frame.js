@@ -2,7 +2,7 @@
 // переключатель «Боевая | Рядом с видео», карандаш редактора и, по желанию, панель справа — файлы
 // разметки (клик выбирает показываемый вариант; ссылка, копирование пути, выбор боевой вручную), содержимое
 // разметки только для чтения (объекты с координатами и атрибутами, поля документа), «Открыть видео» и
-// «Открыть редактор разметки».
+// «Открыть редактор».
 //
 //   var frame = NML.frame.mount(element, {
 //     video: 'D:/video/line1_cam5.avi',  // путь к видео на компьютере сервера (обязательно)
@@ -279,7 +279,7 @@ NML.frame = (function () {
         + '<div class="nml-info-files">' + VARIANTS.map(fileCard).join('') + '</div></section>'
         + '<section class="nml-info-sec">' + contentHtml() + '</section>'
         + '<div class="nml-info-foot"><button type="button" class="nml-btn" data-open-video title="Открыть видео в программе по умолчанию">Открыть видео</button>'
-        + (o.editable ? '<button type="button" class="nml-btn nml-btn-primary" data-open-editor' + (state.variant ? '' : ' disabled') + '>Открыть редактор разметки</button>' : '')
+        + (o.editable ? '<button type="button" class="nml-btn nml-btn-primary" data-open-editor' + (state.variant ? '' : ' disabled') + ' title="Открыть редактор разметки">Открыть редактор</button>' : '')
         + '</div>';
     }
 

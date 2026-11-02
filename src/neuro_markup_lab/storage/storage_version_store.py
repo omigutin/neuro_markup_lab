@@ -76,10 +76,11 @@ class VersionStore:
 
     # ---- запись
     def save(self, document: dict[str, JsonValue], mode: SaveMode, base_version: int | None = None,
-             source: str = '', comment: str = '') -> MarkupVersion:
+             source: str = '', comment: str = '', origin: VersionOrigin = VersionOrigin.EDITOR) -> MarkupVersion:
         """
             Сохраняет документ: новой версией (``NEW_VERSION``) или поверх ``base_version`` (``OVERWRITE``).
-            Сохранённая версия становится текущей, файл рядом с видео — равен ей.
+            Сохранённая версия становится текущей, файл рядом с видео — равен ей. ``origin`` — откуда новая
+            версия (``EDITOR`` из редактора, ``SYNC`` — синхронизация приложением-хозяином).
         """
         history = self._capture_working(self.history())
         text = dump_json_document(document)
@@ -94,7 +95,7 @@ class VersionStore:
                 target.comment = comment
             version = target
         else:
-            version = self._add(history, text, VersionOrigin.EDITOR, now, base_version, source, comment)
+            version = self._add(history, text, origin, now, base_version, source, comment)
         history.current = version.number
         write_json_text(self.working_path, text)
         self._write_index(history)

@@ -55,7 +55,7 @@ NML.editor = (function () {
   var DEFAULT_URLS = { markup: 'api/markup', save: 'api/save', frame: 'frame', locations: 'api/locations',
                        versions: 'api/versions', versionCurrent: 'api/versions/current', versionUpdate: 'api/versions/update' };
   // Как версия появилась (подписи в списке версий)
-  var ORIGIN_LABELS = { initial: 'исходная', external: 'изменена вне редактора', editor: '' };
+  var ORIGIN_LABELS = { initial: 'исходная', external: 'изменена вне редактора', sync: 'синхронизация', editor: '' };
   // Разметка окна редактора: вставляется в страницу при первом открытии
   var EDITOR_HTML = 'static/neuro_markup_lab_editor.html';
 

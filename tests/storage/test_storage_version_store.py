@@ -106,3 +106,10 @@ def test_broken_index(store):
     (store.directory / 'versions.json').write_text('{', encoding='utf-8')
     with pytest.raises(MarkupError):
         store.history()
+
+
+def test_sync_origin(store):
+    store.save(doc(1), SaveMode.NEW_VERSION)
+    version = store.save(doc(2), SaveMode.NEW_VERSION, base_version=1, source='production', comment='синхр.',
+                         origin=VersionOrigin.SYNC)
+    assert version.origin == VersionOrigin.SYNC and store.history().get(2).origin == VersionOrigin.SYNC

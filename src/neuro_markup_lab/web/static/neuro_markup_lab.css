@@ -196,8 +196,8 @@ details > summary.nml-side-h { cursor: pointer; }
 }
 
 /* ---- модуль кадра: кадр слева, разметка справа */
-.nml-frame { display: flex; align-items: flex-start; gap: 20px; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: var(--nml-text); }
-.nml-frame-view { flex: 0 1 960px; min-width: 0; position: sticky; top: 8px; }
+.nml-frame { display: flex; align-items: stretch; gap: 20px; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: var(--nml-text); }
+.nml-frame-view { flex: 0 1 960px; min-width: 0; position: sticky; top: 8px; align-self: flex-start; }
 .nml-frame-info { flex: 1 1 420px; min-width: 320px; display: flex; flex-direction: column; gap: 16px; font-size: 12px; }
 .nml-info-sec { display: flex; flex-direction: column; gap: 8px; }
 .nml-info-h { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--nml-muted); margin-top: 4px; }
@@ -213,7 +213,9 @@ details > summary.nml-side-h { cursor: pointer; }
 .nml-info-path { flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-start; gap: 6px; word-break: break-all; }
 .nml-info-path .nml-link { min-width: 0; }
 .nml-info-actions { flex: 0 0 auto; display: flex; gap: 6px; margin-left: auto; }
-.nml-info-foot { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding-top: 4px; border-top: 1px solid var(--nml-border); margin-top: 4px; padding-top: 12px; }
+/* Кнопки панели — в правом нижнем углу карточки; одинаковой ширины */
+.nml-info-foot { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 12px; }
+.nml-info-foot .nml-btn { width: 160px; }
 .nml-icon-btn { flex: 0 0 auto; width: 24px; height: 22px; padding: 0; border: 1px solid var(--nml-border-strong); border-radius: 6px; background: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .nml-icon-btn svg { width: 13px; height: 13px; fill: none; stroke: #4b5563; stroke-width: 1.4; }
 .nml-icon-btn:hover { border-color: var(--nml-accent); }

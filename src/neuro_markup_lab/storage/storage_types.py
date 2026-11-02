@@ -72,6 +72,7 @@ class VersionOrigin(str, Enum):
     INITIAL = 'initial'          # файл рядом с видео, который был до истории версий
     EXTERNAL = 'external'        # файл изменён не через редактор (сохранён перед записью, чтобы не потерять)
     EDITOR = 'editor'            # сохранена из редактора
+    SYNC = 'sync'                # записана синхронизацией с боевой (приложением-хозяином)
 
 
 @dataclass(slots=True)
