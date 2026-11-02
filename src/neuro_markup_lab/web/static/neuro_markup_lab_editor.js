@@ -10,10 +10,10 @@
 //
 // Открытие из любой страницы (подключены neuro_markup_lab.css, _shapes.js и _editor.js):
 //   NML.editor.open({
-//     video: 'D:/video/plant_cam5.avi',  // путь к видео на компьютере сервера (обязательно)
-//     jsonsDir: 'D:/markup/plant',        // каталог боевых JSON; нет — только «рядом с видео»
+//     video: 'D:/video/line1_cam5.avi',  // путь к видео на компьютере сервера (обязательно)
+//     jsonsDir: 'D:/markup',              // каталог боевых JSON; нет — только «рядом с видео»
 //     variant: 'sidecar',                 // 'sidecar' | 'production'; нет — «рядом с видео», если есть
-//     productionKey: 'norebo_cam25',      // боевая разметка, выбранная вручную; нет — подбирается
+//     productionKey: 'line1_cam5',        // боевая разметка, выбранная вручную; нет — подбирается
 //     urls: { markup, save, frame, locations },  // свои адреса загрузки и сохранения; нет — адреса редактора
 //     onSaved: function (variant, location) {},
 //   });

@@ -1,7 +1,7 @@
 """
-Подбор боевой разметки видео по каталогу JSON.
+Подбор боевой разметки видео по каталогу JSON. Правила с примерами — ``docs/markup_selection.md``.
 
-Ключ разметки — имя файла каталога без ``.json`` (``norebo_cam25``). Ключ и путь к видео делятся
+Ключ разметки — имя файла каталога без ``.json`` (``line1_cam5``). Ключ и путь к видео делятся
 на блоки по разделителям ``/ \\ { } - _ . пробел``; регистр не важен. Файл подходит видео, если
 каждый блок ключа есть среди блоков пути: сначала ищется в имени видео, затем в папках — от
 ближайшей к файлу. Из подходящих выбирается файл, у которого:
@@ -40,15 +40,18 @@ def _video_blocks(video_path: Path) -> tuple[set[str], list[set[str]]]:
 
 
 def find_factory(video_path: Path, factories: Iterable[str]) -> str | None:
-    """ Производство видео из списка: сначала в имени видео, затем в папках от ближайшей. """
-    known = {f.lower(): f for f in factories if f}
+    """
+        Производство видео из списка: все части имени производства — в имени видео, иначе в одной папке
+        (от ближайшей). Из нескольких в одном месте — с большим числом частей.
+    """
+    known = sorted(((f, set(split_blocks(f))) for f in factories if split_blocks(f)), key=lambda x: (-len(x[1]), x[0]))
     if not known:
         return None
     name, folders = _video_blocks(video_path)
     for blocks in (name, *folders):
-        found = sorted(block for block in blocks if block in known)
-        if found:
-            return known[found[0]]
+        for factory, parts in known:
+            if parts <= blocks:
+                return factory
     return None
 
 
@@ -67,7 +70,7 @@ def _score(key: str, name: set[str], folders: Sequence[set[str]],
         if depth is None:
             return None
         depth_sum += depth
-    has_factory = int(factory is not None and factory.lower() in blocks)
+    has_factory = int(factory is not None and set(split_blocks(factory)) <= set(blocks))
     return in_name, len(blocks), -depth_sum, has_factory
 
 

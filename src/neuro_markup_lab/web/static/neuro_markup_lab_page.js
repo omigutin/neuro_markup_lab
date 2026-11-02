@@ -82,8 +82,7 @@
     v.sidecar = entry.sidecar; v.production = entry.production;
     if (!v.cardVariant || !(v[v.cardVariant] || {}).exists) v.cardVariant = v.sidecar.exists ? 'sidecar' : (v.production.exists ? 'production' : null);
     if (lastListing) renderStatus(lastListing);
-    var card = cardOf(v);
-    if (card) card.querySelector('.nml-video-head').outerHTML = headHtml(v);
+    refreshHead(v);
   }
   function renderStatus(d) {
     var parts = ['Видео: ' + entries.length];
@@ -114,24 +113,25 @@
     listHost.innerHTML = html;
     visible.forEach(function (v) { if (v.open) renderBody(v); });
   }
-  // Подпись видео: производство (если известно) и ключ боевой разметки
-  function camText(v) {
-    var parts = [];
-    if (v.factory) parts.push(v.factory);
-    parts.push(v.production.key || 'боевая не подобрана');
-    return parts.join(' · ');
-  }
-  function badge(loc, text) {
-    return '<span class="nml-badge' + (loc.exists ? ' on' : '') + '" title="' + esc(loc.exists ? loc.path : (loc.reason || 'Файла нет')) + '">'
+  // Бейдж варианта разметки: есть файл — «on», показан в кадре — «active»; клик показывает этот вариант
+  function badge(v, variant, text) {
+    var loc = v[variant] || {};
+    var cls = 'nml-badge' + (loc.exists ? ' on' : '') + (v.cardVariant === variant && loc.exists ? ' active' : '');
+    var title = loc.exists ? loc.path : (loc.reason || 'Файла нет');
+    return '<span class="' + cls + '" data-badge="' + variant + '" title="' + esc(title) + '">'
       + (loc.exists ? '✓ ' : '— ') + esc(text) + '</span>';
   }
   function headHtml(v) {
     return '<div class="nml-video-head" data-toggle>'
       + '<span class="nml-caret">▸</span>'
-      + '<span class="nml-video-name" title="' + esc(v.path) + '">' + esc(v.name) + '</span>'
-      + '<span class="nml-video-cam">' + esc(camText(v)) + '</span>'
-      + badge(v.sidecar, 'рядом с видео') + badge(v.production, 'боевой')
+      + '<span class="nml-video-title"><span class="nml-video-name">' + esc(v.name) + '</span>'
+      + '<span class="nml-video-path" title="' + esc(v.path) + '">' + esc(v.path) + '</span></span>'
+      + badge(v, 'sidecar', 'рядом с видео') + badge(v, 'production', 'боевая')
       + '</div>';
+  }
+  function refreshHead(v) {
+    var card = cardOf(v);
+    if (card) card.querySelector('.nml-video-head').outerHTML = headHtml(v);
   }
   function entryByPath(path) {
     for (var i = 0; i < entries.length; i++) if (entries[i].path === path) return entries[i];
@@ -148,7 +148,7 @@
       video: v.path, jsonsDir: jsonsDir, productionKey: manualKey(v), variant: v.cardVariant,
       entry: { sidecar: v.sidecar, production: v.production, factory: v.factory }, details: true,
       onEntry: function (entry) { updateEntry(v, entry); },
-      onVariant: function (variant) { v.cardVariant = variant; },
+      onVariant: function (variant) { v.cardVariant = variant; refreshHead(v); },
       onProductionKey: function (key) { setManualKey(v, key); },
     });
   }
@@ -164,6 +164,18 @@
     if (!card) return;
     var v = entryByPath(card.getAttribute('data-path'));
     if (!v) return;
+    var badgeEl = e.target.closest('[data-badge]');
+    if (badgeEl && (v[badgeEl.getAttribute('data-badge')] || {}).exists) {
+      // Клик по бейджу показывает этот вариант (карточка раскрывается, если закрыта)
+      e.stopPropagation();
+      v.cardVariant = badgeEl.getAttribute('data-badge');
+      if (v.open && v.frame) { v.frame.setVariant(v.cardVariant); refreshHead(v); return; }
+      v.open = true;
+      card.classList.add('open');
+      refreshHead(v);
+      renderBody(v);
+      return;
+    }
     if (e.target.closest('[data-toggle]')) {
       v.open = !v.open;
       card.classList.toggle('open', v.open);
