@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from starlette.concurrency import run_in_threadpool
 
 from .. import __version__
-from ..lab import parse_save_request
+from ..lab import MarkupConflictError, parse_save_request
 from ..markup import MarkupError
 from ..storage import MarkupVariant
 from ..videos import FULL_WIDTH, PREVIEW_WIDTH, first_frame_jpeg
@@ -39,6 +39,17 @@ def _deps(request: Request) -> NeuroMarkupLabWebDependencies:
 
 def _param(request: Request, name: str) -> str:
     return (request.query_params.get(name) or '').strip()
+
+
+def _int_param(request: Request, name: str) -> int | None:
+    """ Целый параметр запроса; пусто — ``None``, не число — :class:`MarkupError`. """
+    raw = _param(request, name)
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise MarkupError(f'Parameter "{name}" must be an integer') from exc
 
 
 def _error(message: str, status: int = 400) -> JSONResponse:
@@ -106,8 +117,9 @@ def open_markup(request: Request) -> JSONResponse:
     except ValueError:
         return _error('Unknown markup variant')
     try:
+        version = _int_param(request, 'version')
         view = _deps(request).service.open(_param(request, 'video'), variant, _param(request, 'jsons'),
-                                           production_key=_param(request, 'key') or None)
+                                           production_key=_param(request, 'key') or None, version=version)
     except MarkupError as exc:
         return _error(str(exc), status=404)
     return JSONResponse({'ok': True, **view.as_dict()}, headers=_NO_STORE)
@@ -122,6 +134,8 @@ async def save_markup(request: Request) -> JSONResponse:
     try:
         save_request = parse_save_request(payload)
         result = await run_in_threadpool(_deps(request).service.save, save_request)
+    except MarkupConflictError as exc:
+        return JSONResponse({'ok': False, 'conflict': True, 'error': str(exc)}, status_code=409, headers=_NO_STORE)
     except MarkupError as exc:
         return _error(str(exc))
     return JSONResponse({'ok': True, **result.as_dict()}, headers=_NO_STORE)
@@ -146,6 +160,51 @@ async def open_markup_file(request: Request) -> JSONResponse:
     except MarkupError as exc:
         return _error(str(exc))
     return JSONResponse({'ok': True, 'path': str(path)}, headers=_NO_STORE)
+
+
+@markup_lab_router.get('/api/versions')
+def list_versions(request: Request) -> JSONResponse:
+    """ Версии разметки рядом с видео и текущая. """
+    try:
+        history = _deps(request).service.versions(_param(request, 'video'))
+    except MarkupError as exc:
+        return _error(str(exc), status=404)
+    return JSONResponse({'ok': True, **history.as_dict()}, headers=_NO_STORE)
+
+
+@markup_lab_router.post('/api/versions/current')
+async def make_current_version(request: Request) -> JSONResponse:
+    """ Делает версию текущей: файл рядом с видео становится равен ей. """
+    payload = await _json_object(request)
+    if isinstance(payload, JSONResponse):
+        return payload
+    video, number = payload.get('video'), payload.get('number')
+    if not isinstance(video, str) or isinstance(number, bool) or not isinstance(number, int):
+        return _error('Fields "video" (string) and "number" (integer) are required')
+    try:
+        version = await run_in_threadpool(_deps(request).service.make_current_version, video, number)
+    except MarkupError as exc:
+        return _error(str(exc))
+    return JSONResponse({'ok': True, 'version': version.as_dict()}, headers=_NO_STORE)
+
+
+@markup_lab_router.post('/api/versions/update')
+async def update_version(request: Request) -> JSONResponse:
+    """ Отметка «закреплена» и комментарий версии. """
+    payload = await _json_object(request)
+    if isinstance(payload, JSONResponse):
+        return payload
+    video, number = payload.get('video'), payload.get('number')
+    pinned, comment = payload.get('pinned'), payload.get('comment')
+    if not isinstance(video, str) or isinstance(number, bool) or not isinstance(number, int):
+        return _error('Fields "video" (string) and "number" (integer) are required')
+    if not isinstance(pinned, (bool, type(None))) or not isinstance(comment, (str, type(None))):
+        return _error('Field "pinned" must be boolean and "comment" a string')
+    try:
+        version = await run_in_threadpool(_deps(request).service.update_version, video, number, pinned, comment)
+    except MarkupError as exc:
+        return _error(str(exc))
+    return JSONResponse({'ok': True, 'version': version.as_dict()}, headers=_NO_STORE)
 
 
 @markup_lab_router.post('/api/open-video')

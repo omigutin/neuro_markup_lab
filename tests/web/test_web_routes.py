@@ -187,3 +187,32 @@ def test_open_video_api(client, opener, workspace):
     assert data['ok'] and opener.opened == [ws['video']]
     assert client.post(f'{PREFIX}/api/open-video', json={'video': str(ws['production'])}).json()['ok'] is False
     assert client.post(f'{PREFIX}/api/open-video', json={'video': 5}).json()['ok'] is False
+
+
+def test_versions_api(client, workspace):
+    ws = workspace(sidecar=False)
+    body = {'video': str(ws['video']), 'jsons_dir': str(ws['jsons']), 'base_variant': 'production',
+            'target_variant': 'sidecar', 'comment': 'первая'}
+    assert client.post(f'{PREFIX}/api/save', json=body).json()['version']['number'] == 1
+    assert client.post(f'{PREFIX}/api/save', json={**body, 'base_variant': 'sidecar', 'base_version': 1}).json()['ok']
+    data = client.get(f'{PREFIX}/api/versions', params={'video': str(ws['video'])}).json()
+    assert data['current'] == 2 and [v['number'] for v in data['versions']] == [1, 2]
+    assert data['versions'][0]['comment'] == 'первая'
+    one = client.get(f'{PREFIX}/api/markup', params={'video': str(ws['video']), 'variant': 'sidecar', 'version': 1})
+    assert one.json()['markup_version'] == 1 and one.json()['current_version'] == 2
+    assert client.post(f'{PREFIX}/api/versions/current', json={'video': str(ws['video']), 'number': 1}).json()['ok']
+    upd = client.post(f'{PREFIX}/api/versions/update', json={'video': str(ws['video']), 'number': 1, 'pinned': True})
+    assert upd.json()['version']['pinned']
+    assert client.post(f'{PREFIX}/api/versions/current', json={'video': str(ws['video'])}).json()['ok'] is False
+    bad = client.get(f'{PREFIX}/api/markup', params={'video': str(ws['video']), 'variant': 'sidecar', 'version': 'x'})
+    assert bad.status_code == 404
+
+
+def test_save_conflict_api(client, workspace):
+    ws = workspace(sidecar=True)
+    view = client.get(f'{PREFIX}/api/markup', params={'video': str(ws['video']), 'variant': 'sidecar'}).json()
+    ws['sidecar'].write_text('{"shapes": []}', encoding='utf-8')
+    body = {'video': str(ws['video']), 'base_variant': 'sidecar', 'target_variant': 'sidecar',
+            'expected_hash': view['file_hash']}
+    response = client.post(f'{PREFIX}/api/save', json=body)
+    assert response.status_code == 409 and response.json()['conflict']

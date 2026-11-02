@@ -41,7 +41,11 @@ NML.common = (function () {
   }
   function parseJson(r) {
     return r.json().catch(function () { return { ok: false, error: 'HTTP ' + r.status }; }).then(function (d) {
-      if (!r.ok || !d || d.ok === false) throw new Error((d && d.error) || ('HTTP ' + r.status));
+      if (!r.ok || !d || d.ok === false) {
+        var err = new Error((d && d.error) || ('HTTP ' + r.status));
+        err.status = r.status; err.data = d;
+        throw err;
+      }
       return d;
     });
   }

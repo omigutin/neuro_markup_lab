@@ -208,3 +208,65 @@ def test_video_entry(workspace):
     assert MarkupLabService().video_entry(str(ws['video']), '').production.path is None
     with pytest.raises(MarkupError):
         MarkupLabService().video_entry(str(ws['videos'] / 'none.avi'), '')
+
+
+# ------------------------------------------------------------------- версии и защита от чужих правок
+
+def _save(ws, **kw) -> SaveRequest:
+    base = dict(video=ws['video'], base_variant=MarkupVariant.PRODUCTION, target_variant=MarkupVariant.SIDECAR,
+                jsons_dir=str(ws['jsons']), changes={}, fields={}, dry_run=False, confirm_production=False)
+    base.update(kw)
+    return SaveRequest(**base)
+
+
+def test_sidecar_save_creates_versions(workspace):
+    from neuro_markup_lab.storage import SaveMode
+    ws = workspace(sidecar=False)
+    service = MarkupLabService()
+    result = service.save(_save(ws, comment='из боевой'))
+    assert result.saved and result.version.number == 1 and result.version.source == 'production'
+    change = {0: ShapeChange(points=[[1, 1], [2, 2]])}
+    result = service.save(_save(ws, base_variant=MarkupVariant.SIDECAR, base_version=1, changes=change))
+    assert result.version.number == 2 and result.version.based_on == 1
+    view = service.open(str(ws['video']), MarkupVariant.SIDECAR, str(ws['jsons']))
+    assert view.current_version == 2 and view.markup_version == 2 and view.versions_count == 2
+    old = service.open(str(ws['video']), MarkupVariant.SIDECAR, str(ws['jsons']), version=1)
+    assert old.markup_version == 1 and old.document['shapes'][0]['points'] == [[10, 20], [110, 220]]
+    result = service.save(_save(ws, base_variant=MarkupVariant.SIDECAR, base_version=1, mode=SaveMode.OVERWRITE,
+                                changes=change))
+    assert result.version.number == 1 and service.versions(str(ws['video'])).current == 1
+    with pytest.raises(MarkupError):
+        service.open(str(ws['video']), MarkupVariant.PRODUCTION, str(ws['jsons']), version=1)
+
+
+def test_conflict_when_file_changed(workspace):
+    from neuro_markup_lab.lab import MarkupConflictError
+    ws = workspace(sidecar=True)
+    service = MarkupLabService()
+    view = service.open(str(ws['video']), MarkupVariant.SIDECAR, str(ws['jsons']))
+    ws['sidecar'].write_text(ws['sidecar'].read_text(encoding='utf-8') + ' ', encoding='utf-8')
+    request = _save(ws, base_variant=MarkupVariant.SIDECAR, expected_hash=view.file_hash)
+    with pytest.raises(MarkupConflictError):
+        service.save(request)
+    assert service.save(_save(ws, base_variant=MarkupVariant.SIDECAR, expected_hash=view.file_hash, force=True)).saved
+
+
+def test_production_save_keeps_backup(workspace):
+    ws = workspace()
+    before = ws['production'].read_text(encoding='utf-8')
+    req = _save(ws, target_variant=MarkupVariant.PRODUCTION, confirm_production=True,
+                changes={0: ShapeChange(points=[[1, 1], [2, 2]])})
+    assert MarkupLabService().save(req).saved
+    backup = ws['production'].with_name('plant_cam5.json.bak')
+    assert backup.read_text(encoding='utf-8') == before
+    assert not (ws['videos'] / 'plant_cam5_x_jsons').exists()
+
+
+def test_make_current_and_update_version(workspace):
+    ws = workspace(sidecar=False)
+    service = MarkupLabService()
+    service.save(_save(ws))
+    service.save(_save(ws, changes={0: ShapeChange(points=[[1, 1], [2, 2]])}))
+    assert service.make_current_version(str(ws['video']), 1).number == 1
+    assert read_json(ws['sidecar'])['shapes'][0]['points'] == [[10, 20], [110, 220]]
+    assert service.update_version(str(ws['video']), 2, pinned=True).pinned

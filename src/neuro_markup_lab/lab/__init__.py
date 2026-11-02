@@ -2,6 +2,7 @@
 
 __all__ = [
            'FileOpener',
+           'MarkupConflictError',
            'MarkupLabHost',
            'MarkupLabService',
            'MarkupView',
@@ -13,6 +14,7 @@ __all__ = [
            'parse_save_request',
 ]
 
+from .lab_conflict_error import MarkupConflictError
 from .lab_file_opener import SystemFileOpener
 from .lab_host import MarkupLabHost
 from .lab_payload import parse_save_request

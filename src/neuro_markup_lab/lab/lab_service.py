@@ -11,8 +11,19 @@ import copy
 from pathlib import Path
 
 from ..markup import JsonValue, MarkupAttributeSchema, MarkupChangeApplier, MarkupError, MarkupNormalizer
-from ..storage import MarkupSource, MarkupVariant, ProductionMarkupSource, SidecarMarkupSource, find_factory
+from ..storage import (
+    MarkupSource,
+    MarkupVariant,
+    MarkupVersion,
+    ProductionMarkupSource,
+    SidecarMarkupSource,
+    VersionHistory,
+    VersionStore,
+    file_hash,
+    find_factory,
+)
 from ..videos import VIDEO_EXTENSIONS, VideoFinder, frame_size
+from .lab_conflict_error import MarkupConflictError
 from .lab_file_opener import SystemFileOpener
 from .lab_host import MarkupLabHost
 from .lab_types import FileOpener, MarkupView, SaveRequest, SaveResult, VideoEntry, VideoListing
@@ -67,21 +78,38 @@ class MarkupLabService:
         return self._entry(video_path, '', sources, factories)
 
     def open(self, video: str, variant: MarkupVariant, jsons_dir: str,
-             production_key: str | None = None) -> MarkupView:
-        """ Разметка ``variant`` для видео и расхождения типов в ней. Нет разметки — :class:`MarkupError`. """
+             production_key: str | None = None, version: int | None = None) -> MarkupView:
+        """
+            Разметка ``variant`` для видео и расхождения типов в ней. ``version`` — версия разметки рядом
+            с видео вместо файла. Нет разметки — :class:`MarkupError`.
+        """
         video_path = _video_path(video)
         jsons_path, _error = _resolve_jsons_dir(jsons_dir)
         source = self._sources(jsons_path, production_key)[variant]
         location = source.locate(video_path)
-        if not location.exists:
+        current, count = None, 0
+        if variant == MarkupVariant.SIDECAR:
+            store = VersionStore(video_path)
+            history = store.history()
+            count = len(history.versions)
+            current = history.current if store.working_matches_current(history) else None
+        if version is not None:
+            if variant != MarkupVariant.SIDECAR:
+                raise MarkupError('Only markup beside the video has versions')
+            document = store.load(version)
+        elif not location.exists:
             raise MarkupError(f'Markup {variant.value} not found for video {video_path}')
-        document = source.load(video_path)
+        else:
+            document = source.load(video_path)
         shapes = document.get('shapes')
         schema = MarkupAttributeSchema.for_shapes(_dict_shapes(shapes))
         # Отчёт строится на копии: показываем, что изменится при сохранении, не меняя документ
         report = MarkupNormalizer(schema).normalize(copy.deepcopy(document))
         return MarkupView(video=video_path, location=location, document=document, schema=schema.as_dict(),
-                          report=report, frame_size=frame_size(video_path))
+                          report=report, frame_size=frame_size(video_path),
+                          file_hash=file_hash(location.path) if location.path else None,
+                          markup_version=version if version is not None else current, current_version=current,
+                          versions_count=count)
 
     def open_file(self, video: str, variant: MarkupVariant, jsons_dir: str,
                   production_key: str | None = None) -> Path:
@@ -119,7 +147,10 @@ class MarkupLabService:
         if target.path is None:
             raise MarkupError(f'Target markup location is unknown: {jsons_error or target.reason}')
 
-        document = base.load(video_path)
+        if request.base_variant == MarkupVariant.SIDECAR and request.base_version is not None:
+            document = VersionStore(video_path).load(request.base_version)
+        else:
+            document = base.load(video_path)
         MarkupChangeApplier().apply(document, request.changes)
         schema = MarkupAttributeSchema.for_shapes(_dict_shapes(document.get('shapes')), request.fields)
         report = MarkupNormalizer(schema).normalize(document)
@@ -127,9 +158,30 @@ class MarkupLabService:
             return SaveResult(saved=False, target=target, report=report)
         if request.target_variant == MarkupVariant.PRODUCTION and not request.confirm_production:
             raise MarkupError('Writing production markup requires confirmation')
-        sources[request.target_variant].save(video_path, document)
+        if request.expected_hash is not None and not request.force and file_hash(target.path) != request.expected_hash:
+            raise MarkupConflictError(f'Markup file was changed after it was opened: {target.path}')
+        version: MarkupVersion | None = None
+        if request.target_variant == MarkupVariant.SIDECAR:
+            based_on = request.base_version if request.base_variant == MarkupVariant.SIDECAR else None
+            version = VersionStore(video_path).save(document, request.mode, based_on,
+                                                    request.base_variant.value, request.comment)
+        else:
+            sources[request.target_variant].save(video_path, document)
         saved = sources[request.target_variant].locate(video_path)
-        return SaveResult(saved=True, target=saved, report=report)
+        return SaveResult(saved=True, target=saved, report=report, version=version)
+
+    def versions(self, video: str) -> VersionHistory:
+        """ Версии разметки рядом с видео и текущая. """
+        return VersionStore(_video_path(video)).history()
+
+    def make_current_version(self, video: str, number: int) -> MarkupVersion:
+        """ Делает версию текущей: файл рядом с видео становится равен ей. """
+        return VersionStore(_video_path(video)).make_current(number)
+
+    def update_version(self, video: str, number: int, pinned: bool | None = None,
+                       comment: str | None = None) -> MarkupVersion:
+        """ Отметка «закреплена» и комментарий версии. """
+        return VersionStore(_video_path(video)).update(number, pinned, comment)
 
     def _entry(self, video_path: Path, relative_dir: str, sources: dict[MarkupVariant, MarkupSource],
                factories: tuple[str, ...]) -> VideoEntry:

@@ -10,10 +10,11 @@ __all__ = ['ProductionMarkupSource', 'check_key']
 from collections.abc import Sequence
 from pathlib import Path
 
-from ..markup import MarkupError
+from ..markup import JsonValue, MarkupError
+from .storage_json_file import write_json_text
 from .storage_key_matcher import match_markup_key
 from .storage_source import MarkupSource
-from .storage_types import SIDECAR_SUFFIX, MarkupKeyResolver, MarkupLocation, MarkupVariant
+from .storage_types import BACKUP_SUFFIX, SIDECAR_SUFFIX, MarkupKeyResolver, MarkupLocation, MarkupVariant
 
 # Расширение файлов боевой разметки
 _JSON_SUFFIX = '.json'
@@ -63,6 +64,18 @@ class ProductionMarkupSource(MarkupSource):
             names = ', '.join(f'{k}{_JSON_SUFFIX}' for k in match.candidates)
             return MarkupLocation(self.variant, None, False, f'Подходят несколько файлов: {names} — выберите вручную')
         return MarkupLocation(self.variant, None, False, 'Подходящий файл в каталоге не найден — выберите вручную')
+
+    def save(self, video_path: Path, document: dict[str, JsonValue]) -> Path:
+        """ Перезаписывает боевой JSON; прежнее содержимое — в ``<ключ>.json.bak`` (одна копия). """
+        location = self.locate(video_path)
+        if location.path is not None and location.path.is_file():
+            backup = location.path.with_name(location.path.name + BACKUP_SUFFIX)
+            try:
+                text = location.path.read_text(encoding='utf-8')
+            except OSError as exc:
+                raise MarkupError(f'Cannot read markup file {location.path}: {exc}') from exc
+            write_json_text(backup, text)
+        return super().save(video_path, document)
 
     def catalog_keys(self) -> tuple[str, ...]:
         """ Ключи боевых JSON каталога: файлы ``*.json`` без скрытых и без разметки рядом с видео. """

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Protocol
 
 from ..markup import AttributeSpec, JsonValue, NormalizationReport, ShapeChange
-from ..storage import MarkupLocation, MarkupVariant
+from ..storage import MarkupLocation, MarkupVariant, MarkupVersion, SaveMode
 
 
 class FileOpener(Protocol):
@@ -84,6 +84,14 @@ class MarkupView:
     report: NormalizationReport
     # Исходный размер кадра видео, если известен
     frame_size: tuple[int, int] | None
+    # Хэш файла разметки на диске при открытии (для защиты от чужих правок); ``None`` — файла нет
+    file_hash: str | None = None
+    # Открытая версия разметки рядом с видео; ``None`` — не версия (боевая или файл вне истории)
+    markup_version: int | None = None
+    # Текущая версия разметки рядом с видео (ей равен файл); ``None`` — нет или файл изменён вне редактора
+    current_version: int | None = None
+    # Сколько версий у разметки рядом с видео
+    versions_count: int = 0
 
     def as_dict(self) -> dict[str, JsonValue]:
         shapes = self.document.get('shapes')
@@ -104,6 +112,8 @@ class MarkupView:
             'image_height': _opt_int(self.document.get('imageHeight')) or height,
             'version': self.document.get('version'),
             'shapes': shapes_view, 'schema': self.schema, 'report': self.report.as_dict(),
+            'file_hash': self.file_hash, 'markup_version': self.markup_version,
+            'current_version': self.current_version, 'versions_count': self.versions_count,
         }
 
 
@@ -126,6 +136,16 @@ class SaveRequest:
     confirm_production: bool
     # Боевая разметка, выбранная пользователем вручную (ключ файла в каталоге); ``None`` — подобрать
     production_key: str | None = None
+    # Как сохранить разметку рядом с видео: новой версией или поверх открытой версии
+    mode: SaveMode = SaveMode.NEW_VERSION
+    # Версия разметки рядом с видео, открытая в редакторе (основа правок); ``None`` — открыт файл или боевая
+    base_version: int | None = None
+    # Хэш файла назначения, каким его видел редактор; изменился — запись отклоняется (если не ``force``)
+    expected_hash: str | None = None
+    # Записать, даже если файл назначения изменился после открытия
+    force: bool = False
+    # Комментарий к версии
+    comment: str = ''
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,9 +154,12 @@ class SaveResult:
     saved: bool
     target: MarkupLocation
     report: NormalizationReport
+    # Записанная версия разметки рядом с видео
+    version: MarkupVersion | None = None
 
     def as_dict(self) -> dict[str, JsonValue]:
-        return {'saved': self.saved, 'target': _location_dict(self.target), 'report': self.report.as_dict()}
+        return {'saved': self.saved, 'target': _location_dict(self.target), 'report': self.report.as_dict(),
+                'version': self.version.as_dict() if self.version else None}
 
 
 def _opt_int(value: JsonValue) -> int | None:

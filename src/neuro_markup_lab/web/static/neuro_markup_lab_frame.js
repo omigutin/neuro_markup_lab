@@ -24,7 +24,8 @@ window.NML = window.NML || {};
 NML.frame = (function () {
   var C = NML.common, esc = C.esc;
   // Адреса API по умолчанию (от корня редактора)
-  var DEFAULT_URLS = { markup: 'api/markup', frame: 'frame', locations: 'api/locations' };
+  var DEFAULT_URLS = { markup: 'api/markup', frame: 'frame', locations: 'api/locations', versions: 'api/versions',
+                       versionCurrent: 'api/versions/current' };
   var VARIANTS = ['sidecar', 'production'];
   // Ключи фигуры, которые не показываются среди атрибутов (геометрия выводится отдельно)
   var GEOMETRY_KEYS = { points: 1, shape_type: 1 };
@@ -75,7 +76,7 @@ NML.frame = (function () {
     var urls = Object.assign({}, DEFAULT_URLS, o.urls || {});
     var jsonsDir = o.jsonsDir || '';
     var state = { entry: o.entry || null, variant: o.variant || null, key: o.productionKey || null,
-                  cache: {}, doc: null, error: '', seq: 0, alive: true };
+                  version: null, versions: null, cache: {}, doc: null, error: '', seq: 0, alive: true };
 
     host.classList.add('nml-frame');
     host.innerHTML = '<div class="nml-frame-view"><div class="nml-preview">'
@@ -104,17 +105,26 @@ NML.frame = (function () {
         if (o.onEntry) o.onEntry(state.entry);
       });
     }
+    // Версии разметки рядом с видео — для выбора в панели
+    function loadVersions() {
+      if (!info || !state.entry || !(state.entry.sidecar || {}).exists) { state.versions = null; return Promise.resolve(); }
+      return C.getJson(urls.versions, { video: o.video }).then(function (d) { state.versions = d; render(); })
+        .catch(function () { state.versions = null; });
+    }
     function loadDoc() {
       var variant = state.variant, seq = ++state.seq;
+      var version = variant === 'sidecar' ? state.version : null;
+      var cacheKey = variant + (version != null ? ':v' + version : '');
       state.doc = null; state.error = '';
       if (!variant) { render(); return; }
-      var promise = state.cache[variant] || (state.cache[variant] = C.getJson(urls.markup, query({ variant: variant })));
+      var promise = state.cache[cacheKey] || (state.cache[cacheKey] = C.getJson(urls.markup,
+        query({ variant: variant, version: version == null ? '' : version })));
       promise.then(function (doc) {
         if (seq !== state.seq || !state.alive) return;
         state.doc = doc;
         render();
       }).catch(function (err) {
-        delete state.cache[variant];
+        delete state.cache[cacheKey];
         if (seq !== state.seq || !state.alive) return;
         state.error = err.message;
         render();
@@ -173,13 +183,38 @@ NML.frame = (function () {
           + (loc.manual ? '<button type="button" class="nml-btn nml-btn-small" data-auto-production title="Вернуть подбор по каталогу">Подбирать автоматически</button>' : '')
           + '<button type="button" class="nml-btn nml-btn-small" data-choose-production>Выбрать файл…</button></span>';
       }
+      var versionsRow = variant === 'sidecar' ? versionsHtml() : '';
       var selectable = loc.exists && !active;
       return '<div class="nml-info-file' + (active ? ' active' : '') + (loc.exists ? '' : ' missing') + (selectable ? ' selectable' : '') + '"'
         + (selectable ? ' data-select-variant="' + variant + '" title="Показать эту разметку"' : '') + '>'
         + '<div class="nml-info-file-head"><b>' + esc(C.VARIANT_LABELS[variant]) + '</b>'
         + (loc.manual ? '<span class="nml-tag">выбрана вручную</span>' : '')
         + (active ? '<span class="nml-tag nml-tag-active">выбрано</span>' : '') + '</div>'
-        + '<div class="nml-info-row"><div class="nml-info-path">' + path + '</div>' + actions + '</div></div>';
+        + '<div class="nml-info-row"><div class="nml-info-path">' + path + '</div>' + actions + '</div>' + versionsRow + '</div>';
+    }
+    function fmtTime(iso) {
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) return iso || '';
+      function two(n) { return (n < 10 ? '0' : '') + n; }
+      return two(d.getDate()) + '.' + two(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + two(d.getHours()) + ':' + two(d.getMinutes());
+    }
+    // Выбор версии разметки рядом с видео: выбранная сразу показывается на кадре
+    function versionsHtml() {
+      var h = state.versions;
+      if (!h || !(h.versions || []).length) return '';
+      var list = h.versions.slice().reverse();
+      var options = '<option value="">файл рядом с видео' + (h.current != null ? ' (текущая v' + h.current + ')' : '') + '</option>'
+        + list.map(function (v) {
+          var text = 'v' + v.number + ' · ' + fmtTime(v.updated) + (v.pinned ? ' ★' : '') + (v.number === h.current ? ' · текущая' : '')
+            + (v.comment ? ' · ' + v.comment : '');
+          return '<option value="' + v.number + '"' + (state.version === v.number ? ' selected' : '') + '>' + esc(text) + '</option>';
+        }).join('');
+      var other = state.version != null && state.version !== h.current;
+      return '<div class="nml-info-versions"><span class="muted">Версия</span>'
+        + '<select class="nml-input nml-input-sm" data-version-select title="Показать версию на кадре">' + options + '</select>'
+        + '<span class="muted">' + list.length + ' ' + plural(list.length, 'версия', 'версии', 'версий') + '</span>'
+        + (other ? '<button type="button" class="nml-btn nml-btn-small" data-make-current="' + state.version + '">Сделать текущей</button>' : '')
+        + '</div>';
     }
     function summaryHtml(doc) {
       var shapes = doc.shapes || [];
@@ -207,21 +242,21 @@ NML.frame = (function () {
       }).join('');
       var rows = names.map(function (k) {
         var title = known[k] && known[k].title ? ' title="' + esc(known[k].title + (known[k].hint ? ' — ' + known[k].hint : '')) + '"' : '';
-        return '<div class="nml-attr"><span' + title + '>' + esc(k) + '</span><div>' + valueHtml(attrs[k]) + '</div></div>';
+        return '<div class="nml-info-attr"><span' + title + '>' + esc(k) + '</span><div>' + valueHtml(attrs[k]) + '</div></div>';
       }).join('');
       var hidden = C.isVisible(attrs) ? '' : '<span class="nml-tag" title="show: false — не рисуется">скрыт</span>';
       return '<div class="nml-obj" data-index="' + s.index + '">'
         + '<div class="nml-obj-head"><span class="nml-obj-n">#' + s.index + '</span><b>' + esc(label) + '</b>'
         + '<span class="muted">' + esc(s.shape_type || '—') + ' · ' + points.length + ' ' + plural(points.length, 'точка', 'точки', 'точек') + '</span>' + hidden + '</div>'
         + '<div class="nml-pts">' + (coords || '<span class="muted">точек нет</span>') + '</div>'
-        + (rows ? '<div class="nml-attrs">' + rows + '</div>' : '')
+        + (rows ? '<div class="nml-info-attrs">' + rows + '</div>' : '')
         + '</div>';
     }
     function docFieldsHtml(doc) {
       var fields = (doc.schema && doc.schema.document) || [];
       if (!fields.length) return '<div class="muted">Своих полей нет.</div>';
-      return '<div class="nml-attrs">' + fields.map(function (f) {
-        return '<div class="nml-attr"><span' + (f.hint ? ' title="' + esc(f.hint) + '"' : '') + '>' + esc(f.name) + '</span>'
+      return '<div class="nml-info-attrs">' + fields.map(function (f) {
+        return '<div class="nml-info-attr"><span' + (f.hint ? ' title="' + esc(f.hint) + '"' : '') + '>' + esc(f.name) + '</span>'
           + '<div><code>' + esc(f.type + (f.nullable ? ' | null' : '')) + '</code></div></div>';
       }).join('') + '</div>';
     }
@@ -279,11 +314,13 @@ NML.frame = (function () {
       if (!state.variant) return;
       NML.editor.open({
         video: o.video, jsonsDir: jsonsDir, productionKey: state.key, variant: state.variant, entry: state.entry,
-        urls: o.editorUrls,
+        version: state.variant === 'sidecar' ? state.version : null, urls: o.editorUrls,
         onSaved: function (target, location) {
           state.entry[target] = location;
           state.cache = {};
+          state.version = null;
           state.variant = target;
+          loadVersions();
           if (o.onEntry) o.onEntry(state.entry);
           if (o.onVariant) o.onVariant(target);
           if (o.onSaved) o.onSaved(target, location);
@@ -306,6 +343,9 @@ NML.frame = (function () {
       if (t.closest('[data-choose-production]')) { e.stopPropagation(); chooseProduction(); return; }
       if (t.closest('[data-auto-production]')) { e.stopPropagation(); autoProduction(); return; }
       if (t.closest('[data-open-editor]')) { e.stopPropagation(); openEditor(); return; }
+      if (t.closest('[data-version-select]')) { e.stopPropagation(); return; }
+      var mc = t.closest('[data-make-current]');
+      if (mc) { e.stopPropagation(); makeCurrent(+mc.getAttribute('data-make-current')); return; }
       if (t.closest('[data-open-video]')) {
         e.stopPropagation();
         C.postJson('api/open-video', { video: o.video }).then(function (d) { C.toast('Открываю ' + d.path); })
@@ -319,11 +359,28 @@ NML.frame = (function () {
       var obj = e.target.closest && e.target.closest('.nml-obj');
       highlight(obj ? obj.getAttribute('data-index') : null);
     }
+    function onChange(e) {
+      var sel = e.target.closest && e.target.closest('[data-version-select]');
+      if (!sel) return;
+      state.version = sel.value ? +sel.value : null;
+      if (state.variant !== 'sidecar') { state.variant = 'sidecar'; if (o.onVariant) o.onVariant('sidecar'); }
+      loadDoc();
+    }
+    function makeCurrent(n) {
+      C.postJson(urls.versionCurrent, { video: o.video, number: n }).then(function () {
+        C.toast('Текущая версия — v' + n);
+        state.version = null; state.cache = {};
+        if (o.onSaved) o.onSaved('sidecar', state.entry.sidecar);
+        loadVersions();
+        loadDoc();
+      }).catch(function (err) { C.toast(err.message, true); });
+    }
     host.addEventListener('click', onClick);
+    host.addEventListener('change', onChange);
     if (info) { info.addEventListener('mouseover', onOver); info.addEventListener('mouseleave', function () { highlight(null); }); }
 
     function refresh() {
-      return loadEntry().then(loadDoc).catch(function (err) {
+      return loadEntry().then(function () { loadVersions(); loadDoc(); }).catch(function (err) {
         state.entry = state.entry || { sidecar: {}, production: {} };
         state.error = err.message;
         render();
@@ -331,6 +388,7 @@ NML.frame = (function () {
     }
     if (state.entry) {
       if (!state.variant) state.variant = defaultVariant(state.entry);
+      loadVersions();
       loadDoc();
     } else {
       refresh();

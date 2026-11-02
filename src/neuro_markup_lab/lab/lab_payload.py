@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ..markup import AttributeSpec, AttributeType, JsonValue, MarkupAttributeSchema, MarkupError, ShapeChange
-from ..storage import MarkupVariant
+from ..storage import MarkupVariant, SaveMode
 from .lab_types import SaveRequest
 
 # Типы, которые редактор может задать полю документа
@@ -33,7 +33,29 @@ def parse_save_request(payload: Mapping[str, JsonValue]) -> SaveRequest:
         dry_run=payload.get('dry_run') is True,
         confirm_production=payload.get('confirm_production') is True,
         production_key=_optional_str(payload.get('production_key'), 'production_key'),
+        mode=_mode(payload.get('mode')),
+        base_version=_optional_int(payload.get('base_version'), 'base_version'),
+        expected_hash=_optional_str(payload.get('expected_hash'), 'expected_hash'),
+        force=payload.get('force') is True,
+        comment=_optional_str(payload.get('comment'), 'comment') or '',
     )
+
+
+def _mode(value: JsonValue) -> SaveMode:
+    if value is None or value == '':
+        return SaveMode.NEW_VERSION
+    try:
+        return SaveMode(value)
+    except ValueError as exc:
+        raise MarkupError(f'Field "mode" has unknown save mode {value!r}') from exc
+
+
+def _optional_int(value: JsonValue, name: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise MarkupError(f'Field "{name}" must be an integer')
+    return value
 
 
 def _optional_str(value: JsonValue, name: str) -> str | None:
