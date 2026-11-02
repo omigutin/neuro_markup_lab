@@ -208,7 +208,6 @@ details > summary.nml-side-h { cursor: pointer; }
 .nml-info-file.selectable { cursor: pointer; }
 .nml-info-file.selectable:hover { border-color: var(--nml-accent); }
 .nml-info-file-head { display: flex; align-items: center; gap: 6px; }
-.nml-info-file-head .nml-tag-active { margin-left: auto; }
 .nml-info-row { display: flex; align-items: center; gap: 10px; }
 .nml-info-path { flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-start; gap: 6px; word-break: break-all; }
 .nml-info-path .nml-link { min-width: 0; }

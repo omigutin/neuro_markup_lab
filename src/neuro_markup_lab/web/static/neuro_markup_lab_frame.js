@@ -181,7 +181,7 @@ NML.frame = (function () {
       if (variant === 'production' && jsonsDir) {
         actions = '<span class="nml-info-actions">'
           + (loc.manual ? '<button type="button" class="nml-btn nml-btn-small" data-auto-production title="Вернуть подбор по каталогу">Подбирать автоматически</button>' : '')
-          + '<button type="button" class="nml-btn nml-btn-small" data-choose-production>Выбрать файл…</button></span>';
+          + '<button type="button" class="nml-btn nml-btn-small" data-choose-production title="Указать другой файл боевой разметки для этого видео">Открыть файл…</button></span>';
       }
       var versionsRow = variant === 'sidecar' ? versionsHtml() : '';
       var selectable = loc.exists && !active;
@@ -189,7 +189,7 @@ NML.frame = (function () {
         + (selectable ? ' data-select-variant="' + variant + '" title="Показать эту разметку"' : '') + '>'
         + '<div class="nml-info-file-head"><b>' + esc(C.VARIANT_LABELS[variant]) + '</b>'
         + (loc.manual ? '<span class="nml-tag">выбрана вручную</span>' : '')
-        + (active ? '<span class="nml-tag nml-tag-active">выбрано</span>' : '') + '</div>'
+        + '</div>'
         + '<div class="nml-info-row"><div class="nml-info-path">' + path + '</div>' + actions + '</div>' + versionsRow + '</div>';
     }
     function fmtTime(iso) {
