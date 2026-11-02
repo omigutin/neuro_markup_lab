@@ -15,7 +15,7 @@ def _cmd_web(args: argparse.Namespace) -> int:
     except ImportError as exc:
         print(f"Веб-интерфейс не установлен: pip install 'neuro-markup-lab[web]' ({exc})")
         return 1
-    run(host=args.host, port=args.port, open_browser=not args.no_browser, factories=args.factory)
+    run(host=args.host, port=args.port, open_browser=not args.no_browser)
     return 0
 
 
@@ -26,9 +26,6 @@ def build_parser() -> argparse.ArgumentParser:
     web.add_argument('--host', default='127.0.0.1', help='адрес сервера')
     web.add_argument('--port', type=int, default=_DEFAULT_PORT, help='порт; занят — берётся следующий свободный')
     web.add_argument('--no-browser', action='store_true', help='не открывать браузер')
-    web.add_argument('--factory', action='append', default=[], metavar='NAME',
-                     help='известная фабрика (можно несколько): камера видео ищется по ней в пути; '
-                          'без списка фабрика — из имени файла перед cam<N>')
     web.set_defaults(func=_cmd_web)
     return parser
 

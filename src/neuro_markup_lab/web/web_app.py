@@ -12,27 +12,31 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 
-from ..lab import MarkupLabService
-from .web_folder_picker import pick_folder
+from ..lab import MarkupLabHost, MarkupLabService
 from .web_no_cache_static import NoCacheStaticFiles
+from .web_path_picker import pick_path
 from .web_routes import markup_lab_router
-from .web_types import APP_ID, DEFAULT_PREFIX, FolderPicker, NavRenderer, NeuroMarkupLabWebDependencies
+from .web_types import APP_ID, DEFAULT_PREFIX, NavRenderer, NeuroMarkupLabWebDependencies, PathPicker
 
 _WEB_DIR = Path(__file__).resolve().parent
 _TEMPLATES_DIR = _WEB_DIR / 'templates'
 _STATIC_DIR = _WEB_DIR / 'static'
 
 
-def create_app(service: MarkupLabService | None = None, *, nav_renderer: NavRenderer | None = None,
-               folder_picker: FolderPicker | None = None) -> FastAPI:
+def create_app(service: MarkupLabService | None = None, *, host: MarkupLabHost | None = None,
+               nav_renderer: NavRenderer | None = None, path_picker: PathPicker | None = None) -> FastAPI:
     """
         Приложение редактора: страница ``/``, API ``/api/...``, кадр ``/frame``, статика ``/static``.
-        ``service`` — операции над разметкой (здесь хозяин передаёт свой ``camera_resolver``),
-        ``nav_renderer`` — навигация хозяина над страницей, ``folder_picker`` — выбор каталога.
+        ``host`` — данные приложения-хозяина (ключ боевой разметки, производства); ``service`` — свой
+        сервис вместо сервиса по умолчанию (тогда ``host`` передаётся в него); ``nav_renderer`` —
+        навигация хозяина над страницей; ``path_picker`` — окно выбора каталога и файла.
     """
+    if service is not None and host is not None:
+        raise ValueError('Pass host to MarkupLabService when a custom service is given')
     app = FastAPI(title=APP_ID, docs_url='/api/docs', redoc_url=None, openapi_url='/api/openapi.json')
     app.state.nml = NeuroMarkupLabWebDependencies(
-        service=service or MarkupLabService(), nav_renderer=nav_renderer, folder_picker=folder_picker or pick_folder)
+        service=service or MarkupLabService(host=host), nav_renderer=nav_renderer,
+        path_picker=path_picker or pick_path)
     app.state.nml_jinja = Jinja2Templates(directory=str(_TEMPLATES_DIR))
     app.mount('/static', NoCacheStaticFiles(directory=str(_STATIC_DIR)), name='static')
     app.include_router(markup_lab_router)
@@ -40,7 +44,8 @@ def create_app(service: MarkupLabService | None = None, *, nav_renderer: NavRend
 
 
 def mount_app(parent: FastAPI, prefix: str = DEFAULT_PREFIX, service: MarkupLabService | None = None, *,
-              nav_renderer: NavRenderer | None = None, folder_picker: FolderPicker | None = None) -> FastAPI:
+              host: MarkupLabHost | None = None, nav_renderer: NavRenderer | None = None,
+              path_picker: PathPicker | None = None) -> FastAPI:
     """
         Встраивает редактор в приложение ``parent`` по адресу ``prefix`` (страница — ``prefix + '/'``).
         Возвращает приложение редактора.
@@ -48,6 +53,6 @@ def mount_app(parent: FastAPI, prefix: str = DEFAULT_PREFIX, service: MarkupLabS
     path = '/' + prefix.strip('/')
     if path == '/':
         raise ValueError('Prefix must not be empty: mount the app returned by create_app() instead')
-    app = create_app(service, nav_renderer=nav_renderer, folder_picker=folder_picker)
+    app = create_app(service, host=host, nav_renderer=nav_renderer, path_picker=path_picker)
     parent.mount(path, app, name=APP_ID)
     return app

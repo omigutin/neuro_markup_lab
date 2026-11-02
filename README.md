@@ -30,18 +30,37 @@ for shape in document.shapes:
 - Поля, добавленные в редакторе, сохраняются в JSON и читаются по имени через `MarkupShape.attribute`.
 - Новое постоянное поле добавляется в `MarkupShape` и выходит новой версией библиотеки.
 
-## Камера видео и боевая разметка
+## Боевая разметка видео
 
-Боевая разметка камеры — `<каталог JSON>/<factory>_cam<N>.json`. Камеру по пути видео определяет `CameraResolver`:
-по умолчанию `CameraNameParser` (`plant_cam5_x.avi` → `plant`, `5`; со списком фабрик — фабрика из пути).
-Приложение может передать свою функцию: `MarkupLabService(camera_resolver=...)`.
+Боевая разметка — файл `<каталог JSON>/<ключ>.json`. Ключ выбирается так:
+
+1. файл, выбранный пользователем для этого видео вручную;
+2. ключ от приложения-хозяина (`MarkupLabHost.markup_key`);
+3. подбор по файлам каталога: ключ и путь к видео делятся на блоки по `/ \ - _ . пробел`, файл подходит,
+   если все его блоки есть в имени видео или в папках. `…/norebo/…/ml_cam25_2209.avi` → `norebo_cam25.json`.
+   При нескольких подходящих побеждает файл, у которого больше блоков в имени видео, затем более длинный ключ,
+   затем более близкие папки, затем производство видео. Равные кандидаты — выбирать вручную.
+
+## Данные от приложения-хозяина
+
+```python
+from neuro_markup_lab import MarkupLabHost
+
+class Host(MarkupLabHost):
+    def markup_key(self, video):      # ключ боевой разметки; None — подобрать по каталогу
+        return my_parser(video)
+    def factories(self):              # известные производства
+        return db.factories()
+```
+
+Всё необязательно: переопределяется только то, что хозяин знает. Методы вызываются на каждый запрос.
+Новые данные добавляются новыми методами со значением «не знаю» по умолчанию.
 
 ## Запуск
 
 ```bash
 nml web                                   # своя страница в браузере, порт 8790
 nml web --port 8791 --no-browser
-nml web --factory plant --factory mill    # фабрика видео ищется в пути по списку
 python run.py                             # то же из папки проекта, без установки
 ```
 
@@ -50,11 +69,10 @@ python run.py                             # то же из папки проек
 ## Встраивание в другое веб-приложение
 
 ```python
-from neuro_markup_lab import MarkupLabService
 from neuro_markup_lab.web import mount_app
 
 mount_app(app, "/neuro-markup-lab",
-          MarkupLabService(camera_resolver=camera_of),   # своя функция «видео → камера»
+          host=Host(),                                   # данные приложения-хозяина
           nav_renderer=lambda: render_nav("markup"))     # навигация приложения над страницей
 ```
 
@@ -72,6 +90,7 @@ mount_app(app, "/neuro-markup-lab",
     video: "D:/video/plant_cam5.avi",   // путь к видео на компьютере сервера
     jsonsDir: "D:/markup/plant",         // каталог боевых JSON; нет — только «рядом с видео»
     variant: "sidecar",                  // необязательно: по умолчанию «рядом с видео», если есть
+    productionKey: "norebo_cam25",       // необязательно: боевая разметка, выбранная вручную
     urls: {},                            // необязательно: свои адреса markup, save, frame, locations
     onSaved: (variant, location) => {},
   });

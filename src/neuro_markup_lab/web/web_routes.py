@@ -20,8 +20,8 @@ from ..lab import parse_save_request
 from ..markup import MarkupError
 from ..storage import MarkupVariant
 from ..videos import FULL_WIDTH, PREVIEW_WIDTH, first_frame_jpeg
-from .web_folder_picker_error import FolderPickerError
-from .web_types import APP_ID, NeuroMarkupLabWebDependencies
+from .web_path_picker_error import PathPickerError
+from .web_types import APP_ID, NeuroMarkupLabWebDependencies, PickKind
 
 markup_lab_router = APIRouter()
 
@@ -85,9 +85,14 @@ def list_videos(request: Request) -> JSONResponse:
 
 @markup_lab_router.get('/api/locations')
 def video_locations(request: Request) -> JSONResponse:
-    """ Где лежит разметка одного видео: для редактора, открытого из чужой страницы. """
+    """
+        Где лежит разметка одного видео. ``key`` — боевая разметка, выбранная вручную;
+        ``production`` — путь выбранного файла (должен лежать в каталоге боевых JSON).
+    """
     try:
-        entry = _deps(request).service.video_entry(_param(request, 'video'), _param(request, 'jsons'))
+        entry = _deps(request).service.video_entry(
+            _param(request, 'video'), _param(request, 'jsons'), production_key=_param(request, 'key') or None,
+            production_path=_param(request, 'production') or None)
     except MarkupError as exc:
         return _error(str(exc), status=404)
     return JSONResponse({'ok': True, **entry.as_dict()}, headers=_NO_STORE)
@@ -101,7 +106,8 @@ def open_markup(request: Request) -> JSONResponse:
     except ValueError:
         return _error('Unknown markup variant')
     try:
-        view = _deps(request).service.open(_param(request, 'video'), variant, _param(request, 'jsons'))
+        view = _deps(request).service.open(_param(request, 'video'), variant, _param(request, 'jsons'),
+                                           production_key=_param(request, 'key') or None)
     except MarkupError as exc:
         return _error(str(exc), status=404)
     return JSONResponse({'ok': True, **view.as_dict()}, headers=_NO_STORE)
@@ -132,18 +138,19 @@ async def open_markup_file(request: Request) -> JSONResponse:
     except ValueError:
         return _error('Unknown markup variant')
     video, jsons_dir = payload.get('video'), payload.get('jsons_dir') or ''
-    if not isinstance(video, str) or not isinstance(jsons_dir, str):
-        return _error('Fields "video" and "jsons_dir" must be strings')
+    key = payload.get('production_key') or None
+    if not isinstance(video, str) or not isinstance(jsons_dir, str) or not isinstance(key, (str, type(None))):
+        return _error('Fields "video", "jsons_dir" and "production_key" must be strings')
     try:
-        path = await run_in_threadpool(_deps(request).service.open_file, video, variant, jsons_dir)
+        path = await run_in_threadpool(_deps(request).service.open_file, video, variant, jsons_dir, key)
     except MarkupError as exc:
         return _error(str(exc))
     return JSONResponse({'ok': True, 'path': str(path)}, headers=_NO_STORE)
 
 
 @markup_lab_router.post('/api/pick')
-async def pick_folder(request: Request) -> JSONResponse:
-    """ Системное окно выбора каталога на компьютере сервера; отмена — ``path: null``. """
+async def pick_path(request: Request) -> JSONResponse:
+    """ Системное окно выбора каталога (``kind: dir``) или JSON (``kind: json``); отмена — ``path: null``. """
     payload = await _json_object(request)
     if isinstance(payload, JSONResponse):
         return payload
@@ -151,8 +158,12 @@ async def pick_folder(request: Request) -> JSONResponse:
     if not isinstance(initial, str):
         return _error('Field "initial" must be a string')
     try:
-        path = await run_in_threadpool(_deps(request).folder_picker, initial)
-    except FolderPickerError as exc:
+        kind = PickKind(payload.get('kind') or PickKind.DIR.value)
+    except ValueError:
+        return _error('Unknown pick kind')
+    try:
+        path = await run_in_threadpool(_deps(request).path_picker, kind, initial)
+    except PathPickerError as exc:
         return _error(str(exc), status=503)
     return JSONResponse({'ok': True, 'path': path}, headers=_NO_STORE)
 

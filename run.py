@@ -1,7 +1,7 @@
 """ Запуск редактора разметки из папки проекта, без установки пакета.
 
     python run.py                          — открыть редактор в браузере;
-    python run.py --factory plant --port 8791  — параметры как у «nml web».
+    python run.py --port 8791 --no-browser — параметры как у «nml web».
 """
 
 import sys

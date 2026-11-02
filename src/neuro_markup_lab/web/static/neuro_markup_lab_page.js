@@ -31,7 +31,7 @@
   }
   function pickFolder(input) {
     C.toast('Открываю выбор каталога…');
-    C.postJson('api/pick', { initial: input.value.trim() }).then(function (d) {
+    C.postJson('api/pick', { kind: 'dir', initial: input.value.trim() }).then(function (d) {
       if (d.path) { input.value = d.path; saveInputs(); load(); } else C.toast('Каталог не выбран.');
     }).catch(function (err) { C.toast('Выбор каталога недоступен: ' + err.message, true); });
   }
@@ -86,9 +86,12 @@
     listHost.innerHTML = html;
     visible.forEach(function (v) { if (v.open) renderBody(v); });
   }
+  // Подпись видео: производство (если известно) и ключ боевой разметки
   function camText(v) {
-    if (v.factory && v.cam_id) return v.factory + ' · cam ' + v.cam_id;
-    return 'камера не определена';
+    var parts = [];
+    if (v.factory) parts.push(v.factory);
+    parts.push(v.production.key || 'боевая не подобрана');
+    return parts.join(' · ');
   }
   function badge(loc, text) {
     return '<span class="nml-badge' + (loc.exists ? ' on' : '') + '" title="' + esc(loc.exists ? loc.path : (loc.reason || 'Файла нет')) + '">'

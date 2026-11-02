@@ -107,8 +107,8 @@ NML.common = (function () {
   }
 
   // Открыть JSON разметки видео в программе по умолчанию (на этом компьютере)
-  function openFile(video, variant, jsonsDir) {
-    postJson('api/open-file', { video: video, variant: variant, jsons_dir: jsonsDir || '' })
+  function openFile(video, variant, jsonsDir, productionKey) {
+    postJson('api/open-file', { video: video, variant: variant, jsons_dir: jsonsDir || '', production_key: productionKey || null })
       .then(function (d) { toast('Открываю ' + d.path); })
       .catch(function (err) { toast('Не удалось открыть файл: ' + err.message, true); });
   }

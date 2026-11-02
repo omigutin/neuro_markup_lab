@@ -1,8 +1,8 @@
 """
 Сервис редактора разметки: список видео каталога, открытие и сохранение разметки.
 
-Источники разметки создаются на каждый запрос: каталог JSON производства выбирает
-пользователь на странице, глобального состояния нет.
+Источники разметки создаются на каждый запрос: каталог боевых JSON выбирает пользователь
+на странице, глобального состояния нет.
 """
 
 __all__ = ['MarkupLabService']
@@ -11,28 +11,22 @@ import copy
 from pathlib import Path
 
 from ..markup import JsonValue, MarkupAttributeSchema, MarkupChangeApplier, MarkupError, MarkupNormalizer
-from ..storage import (
-    CameraNameParser,
-    CameraResolver,
-    MarkupSource,
-    MarkupVariant,
-    ProductionMarkupSource,
-    SidecarMarkupSource,
-)
+from ..storage import MarkupSource, MarkupVariant, ProductionMarkupSource, SidecarMarkupSource, find_factory
 from ..videos import VIDEO_EXTENSIONS, VideoFinder, frame_size
 from .lab_file_opener import SystemFileOpener
+from .lab_host import MarkupLabHost
 from .lab_types import FileOpener, MarkupView, SaveRequest, SaveResult, VideoEntry, VideoListing
 
 
 class MarkupLabService:
-    """ Операции страницы разметки над видео и их разметкой. """
+    """ Операции над видео и их разметкой: список, открытие, сохранение. """
 
     def __init__(self, finder: VideoFinder | None = None, opener: FileOpener | None = None,
-                 camera_resolver: CameraResolver | None = None) -> None:
+                 host: MarkupLabHost | None = None) -> None:
         self._finder = finder or VideoFinder()
         self._opener: FileOpener = opener or SystemFileOpener()
-        # Камера по пути видео: по ней находится боевая разметка
-        self._camera_resolver: CameraResolver = camera_resolver or CameraNameParser()
+        # Данные приложения-хозяина: ключ боевой разметки, производства
+        self._host: MarkupLabHost = host or MarkupLabHost()
 
     def list_videos(self, directory: str, recursive: bool, jsons_dir: str) -> VideoListing:
         """ Видео каталога ``directory`` с наличием разметки рядом с видео и в каталоге JSON. """
@@ -50,32 +44,34 @@ class MarkupLabService:
         except OSError as exc:
             listing.error = f'Каталог видео не прочитать: {exc}'
             return listing
-        sources = self._sources(jsons_path)
+        factories = tuple(self._host.factories())
+        sources = self._sources(jsons_path, factories=factories)
         for file in files:
-            listing.videos.append(self._entry(file.path, file.relative_dir, sources))
+            listing.videos.append(self._entry(file.path, file.relative_dir, sources, factories))
         return listing
 
-    def video_entry(self, video: str, jsons_dir: str) -> VideoEntry:
-        """ Одно видео и где лежит его разметка: для редактора, открытого из чужой страницы. """
+    def video_entry(self, video: str, jsons_dir: str, production_key: str | None = None,
+                    production_path: str | None = None) -> VideoEntry:
+        """
+            Одно видео и где лежит его разметка. ``production_key`` — боевая разметка, выбранная вручную;
+            ``production_path`` — выбранный файл (должен лежать в каталоге боевых JSON).
+        """
         video_path = _video_path(video)
-        jsons_path, _error = _resolve_jsons_dir(jsons_dir)
-        return self._entry(video_path, '', self._sources(jsons_path))
+        jsons_path, jsons_error = _resolve_jsons_dir(jsons_dir)
+        if production_path:
+            if jsons_path is None:
+                raise MarkupError(f'Production markup directory is not available: {jsons_error or "not set"}')
+            production_key = ProductionMarkupSource(jsons_path).key_of(Path(production_path))
+        factories = tuple(self._host.factories())
+        sources = self._sources(jsons_path, production_key, factories)
+        return self._entry(video_path, '', sources, factories)
 
-    def _entry(self, video_path: Path, relative_dir: str,
-               sources: dict[MarkupVariant, MarkupSource]) -> VideoEntry:
-        camera = self._camera_resolver(video_path)
-        return VideoEntry(
-            path=video_path, relative_dir=relative_dir,
-            factory=camera.factory if camera else None, cam_id=camera.cam_id if camera else None,
-            sidecar=sources[MarkupVariant.SIDECAR].locate(video_path),
-            production=sources[MarkupVariant.PRODUCTION].locate(video_path),
-        )
-
-    def open(self, video: str, variant: MarkupVariant, jsons_dir: str) -> MarkupView:
+    def open(self, video: str, variant: MarkupVariant, jsons_dir: str,
+             production_key: str | None = None) -> MarkupView:
         """ Разметка ``variant`` для видео и расхождения типов в ней. Нет разметки — :class:`MarkupError`. """
         video_path = _video_path(video)
         jsons_path, _error = _resolve_jsons_dir(jsons_dir)
-        source = self._sources(jsons_path)[variant]
+        source = self._sources(jsons_path, production_key)[variant]
         location = source.locate(video_path)
         if not location.exists:
             raise MarkupError(f'Markup {variant.value} not found for video {video_path}')
@@ -87,14 +83,15 @@ class MarkupLabService:
         return MarkupView(video=video_path, location=location, document=document, schema=schema.as_dict(),
                           report=report, frame_size=frame_size(video_path))
 
-    def open_file(self, video: str, variant: MarkupVariant, jsons_dir: str) -> Path:
+    def open_file(self, video: str, variant: MarkupVariant, jsons_dir: str,
+                  production_key: str | None = None) -> Path:
         """
             Открывает файл разметки видео в программе по умолчанию. Открывается только путь,
             вычисленный источником для этого видео, — произвольный путь из запроса не принимается.
         """
         video_path = _video_path(video)
         jsons_path, _error = _resolve_jsons_dir(jsons_dir)
-        location = self._sources(jsons_path)[variant].locate(video_path)
+        location = self._sources(jsons_path, production_key)[variant].locate(video_path)
         if not location.exists or location.path is None:
             raise MarkupError(f'Markup {variant.value} not found for video {video_path}')
         self._opener.open(location.path)
@@ -108,7 +105,7 @@ class MarkupLabService:
         """
         video_path = _video_path(str(request.video))
         jsons_path, jsons_error = _resolve_jsons_dir(request.jsons_dir)
-        sources = self._sources(jsons_path)
+        sources = self._sources(jsons_path, request.production_key)
         base = sources[request.base_variant]
         if not base.locate(video_path).exists:
             raise MarkupError(f'Markup {request.base_variant.value} not found for video {video_path}')
@@ -128,10 +125,20 @@ class MarkupLabService:
         saved = sources[request.target_variant].locate(video_path)
         return SaveResult(saved=True, target=saved, report=report)
 
-    def _sources(self, jsons_dir: Path | None) -> dict[MarkupVariant, MarkupSource]:
+    def _entry(self, video_path: Path, relative_dir: str, sources: dict[MarkupVariant, MarkupSource],
+               factories: tuple[str, ...]) -> VideoEntry:
+        return VideoEntry(
+            path=video_path, relative_dir=relative_dir, factory=find_factory(video_path, factories),
+            sidecar=sources[MarkupVariant.SIDECAR].locate(video_path),
+            production=sources[MarkupVariant.PRODUCTION].locate(video_path),
+        )
+
+    def _sources(self, jsons_dir: Path | None, production_key: str | None = None,
+                 factories: tuple[str, ...] | None = None) -> dict[MarkupVariant, MarkupSource]:
+        known = tuple(self._host.factories()) if factories is None else factories
         return {
             MarkupVariant.SIDECAR: SidecarMarkupSource(),
-            MarkupVariant.PRODUCTION: ProductionMarkupSource(jsons_dir, self._camera_resolver),
+            MarkupVariant.PRODUCTION: ProductionMarkupSource(jsons_dir, self._host.markup_key, known, production_key),
         }
 
 

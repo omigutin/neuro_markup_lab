@@ -32,7 +32,16 @@ def parse_save_request(payload: Mapping[str, JsonValue]) -> SaveRequest:
         fields=_fields(payload.get('fields')),
         dry_run=payload.get('dry_run') is True,
         confirm_production=payload.get('confirm_production') is True,
+        production_key=_optional_str(payload.get('production_key'), 'production_key'),
     )
+
+
+def _optional_str(value: JsonValue, name: str) -> str | None:
+    if value is None or value == '':
+        return None
+    if not isinstance(value, str):
+        raise MarkupError(f'Field "{name}" must be a string')
+    return value.strip() or None
 
 
 def _variant(value: JsonValue, name: str) -> MarkupVariant:

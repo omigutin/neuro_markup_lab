@@ -1,9 +1,13 @@
-""" Типы веб-слоя: зависимости маршрутов, навигация хозяина, окно выбора каталога, константы. """
+""" Типы веб-слоя: зависимости маршрутов, навигация хозяина, окно выбора пути, константы. """
 
-__all__ = ['APP_ID', 'DEFAULT_PORT', 'DEFAULT_PREFIX', 'FolderPicker', 'NavRenderer', 'NeuroMarkupLabWebDependencies']
+__all__ = [
+    'APP_ID', 'DEFAULT_PORT', 'DEFAULT_PREFIX', 'NavRenderer', 'NeuroMarkupLabWebDependencies', 'PathPicker',
+    'PickKind',
+]
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import Enum
 from typing import TypeAlias
 
 from ..lab import MarkupLabService
@@ -15,10 +19,17 @@ DEFAULT_PORT = 8790
 # Адрес страницы при встраивании в другое приложение по умолчанию
 DEFAULT_PREFIX = '/neuro-markup-lab'
 
+
+class PickKind(str, Enum):
+    """ Что выбирать в окне выбора. Значение стабильно — приходит из запроса. """
+    DIR = 'dir'      # каталог
+    JSON = 'json'    # JSON-файл разметки
+
+
 # Навигация приложения-хозяина: готовый HTML над страницей разметки
 NavRenderer: TypeAlias = Callable[[], str]
-# Окно выбора каталога: начальный каталог → выбранный каталог или ``None`` (отмена)
-FolderPicker: TypeAlias = Callable[[str], str | None]
+# Окно выбора: (что выбрать, начальный каталог) → выбранный путь или ``None`` (отмена)
+PathPicker: TypeAlias = Callable[[PickKind, str], str | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,5 +39,5 @@ class NeuroMarkupLabWebDependencies:
     service: MarkupLabService
     # Навигация хозяина над страницей; ``None`` — без навигации
     nav_renderer: NavRenderer | None
-    # Окно выбора каталога на компьютере сервера
-    folder_picker: FolderPicker
+    # Окно выбора каталога или файла на компьютере сервера
+    path_picker: PathPicker

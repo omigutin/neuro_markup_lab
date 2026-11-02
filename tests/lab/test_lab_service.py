@@ -2,9 +2,9 @@
 
 import pytest
 
-from neuro_markup_lab.lab import MarkupLabService, SaveRequest
+from neuro_markup_lab.lab import MarkupLabHost, MarkupLabService, SaveRequest
 from neuro_markup_lab.markup import AttributeSpec, AttributeType, MarkupError, ShapeChange
-from neuro_markup_lab.storage import CameraNameParser, MarkupVariant
+from neuro_markup_lab.storage import MarkupVariant
 
 from ..conftest import read_json
 
@@ -22,7 +22,7 @@ def test_list_videos_with_markup(workspace):
     listing = MarkupLabService().list_videos(str(ws['videos']), False, str(ws['jsons']))
     assert not listing.error and not listing.jsons_error
     video = listing.videos[0]
-    assert (video.factory, video.cam_id) == ('plant', '5')
+    assert video.factory is None and video.production.key == 'plant_cam5'
     assert video.sidecar.exists and video.production.exists
     assert video.default_variant == MarkupVariant.SIDECAR
     assert listing.as_dict()['videos'][0]['default_variant'] == 'sidecar'
@@ -154,12 +154,51 @@ def test_open_file_opens_located_markup_only(workspace):
         service.open_file(str(ws['production']), MarkupVariant.PRODUCTION, str(ws['jsons']))
 
 
-def test_list_videos_with_camera_resolver(workspace):
+class _Host(MarkupLabHost):
+    def __init__(self, key: str | None = None) -> None:
+        self.key = key
+
+    def markup_key(self, video):
+        return self.key
+
+    def factories(self):
+        return ['Plant', 'mill']
+
+
+def test_list_videos_with_host(workspace):
     ws = workspace(sidecar=False)
-    service = MarkupLabService(camera_resolver=CameraNameParser(['mill']))
-    video = service.list_videos(str(ws['videos']), False, str(ws['jsons'])).videos[0]
-    assert (video.factory, video.cam_id) == (None, None)
-    assert video.production.path is None and video.default_variant is None
+    video = MarkupLabService(host=_Host()).list_videos(str(ws['videos']), False, str(ws['jsons'])).videos[0]
+    assert video.factory == 'Plant' and video.production.exists
+    video = MarkupLabService(host=_Host('other')).list_videos(str(ws['videos']), False, str(ws['jsons'])).videos[0]
+    assert video.production.key == 'other' and not video.production.exists
+
+
+def test_manual_production_key(workspace):
+    ws = workspace(sidecar=False)
+    (ws['jsons'] / 'line_a.json').write_text((ws['production']).read_text(encoding='utf-8'), encoding='utf-8')
+    service = MarkupLabService()
+    entry = service.video_entry(str(ws['video']), str(ws['jsons']), production_key='line_a')
+    assert entry.production.key == 'line_a' and entry.production.manual and entry.production.exists
+    entry = service.video_entry(str(ws['video']), str(ws['jsons']), production_path=str(ws['jsons'] / 'line_a.json'))
+    assert entry.production.key == 'line_a'
+    view = service.open(str(ws['video']), MarkupVariant.PRODUCTION, str(ws['jsons']), production_key='line_a')
+    assert view.location.key == 'line_a'
+    with pytest.raises(MarkupError):
+        service.video_entry(str(ws['video']), str(ws['jsons']), production_path=str(ws['videos'] / 'x.json'))
+    with pytest.raises(MarkupError):
+        service.video_entry(str(ws['video']), str(ws['jsons']), production_key='../x')
+
+
+def test_save_to_manual_production_key(workspace):
+    ws = workspace(sidecar=False)
+    (ws['jsons'] / 'line_a.json').write_text((ws['production']).read_text(encoding='utf-8'), encoding='utf-8')
+    req = SaveRequest(video=ws['video'], base_variant=MarkupVariant.PRODUCTION, target_variant=MarkupVariant.PRODUCTION,
+                      jsons_dir=str(ws['jsons']), changes={0: ShapeChange(points=[[1, 1], [2, 2]])}, fields={},
+                      dry_run=False, confirm_production=True, production_key='line_a')
+    result = MarkupLabService().save(req)
+    assert result.saved and result.target.key == 'line_a'
+    assert read_json(ws['jsons'] / 'line_a.json')['shapes'][0]['points'] == [[1.0, 1.0], [2.0, 2.0]]
+    assert read_json(ws['production'])['shapes'][0]['points'] == [[10, 20], [110, 220]]
 
 
 def test_video_entry(workspace):

@@ -13,6 +13,7 @@
 //     video: 'D:/video/plant_cam5.avi',  // путь к видео на компьютере сервера (обязательно)
 //     jsonsDir: 'D:/markup/plant',        // каталог боевых JSON; нет — только «рядом с видео»
 //     variant: 'sidecar',                 // 'sidecar' | 'production'; нет — «рядом с видео», если есть
+//     productionKey: 'norebo_cam25',      // боевая разметка, выбранная вручную; нет — подбирается
 //     urls: { markup, save, frame, locations },  // свои адреса загрузки и сохранения; нет — адреса редактора
 //     onSaved: function (variant, location) {},
 //   });
@@ -54,7 +55,7 @@ NML.editor = (function () {
   // Разметка окна редактора: вставляется в страницу при первом открытии
   var EDITOR_HTML = 'static/neuro_markup_lab_editor.html';
 
-  var ctx = null;            // {video, videoName, jsonsDir, entry, variant, urls, onSaved}
+  var ctx = null;            // {video, videoName, jsonsDir, productionKey, entry, variant, urls, onSaved}
   var domReady = null;       // загрузка окна редактора (Promise)
   var doc = null;            // ответ /api/markup
   var known = {};            // известные поля модели фигуры: имя → spec
@@ -92,7 +93,7 @@ NML.editor = (function () {
       show();
       if (ctx.entry) { start(); return; }
       el('nml-editor-canvas').innerHTML = '<div>Загрузка…</div>';
-      C.getJson(ctx.urls.locations, { video: ctx.video, jsons: ctx.jsonsDir }).then(function (d) {
+      C.getJson(ctx.urls.locations, { video: ctx.video, jsons: ctx.jsonsDir, key: ctx.productionKey || '' }).then(function (d) {
         ctx.entry = { sidecar: d.sidecar, production: d.production };
         start();
       }).catch(function (err) {
@@ -131,7 +132,7 @@ NML.editor = (function () {
     svg = null; handlesLayer = null; shapes = []; selectedIndex = -1;
     el('nml-editor-canvas').innerHTML = '<div>Загрузка…</div>';
     el('nml-editor-source').textContent = '';
-    C.getJson(ctx.urls.markup, { video: ctx.video, variant: variant, jsons: ctx.jsonsDir }).then(function (d) {
+    C.getJson(ctx.urls.markup, { video: ctx.video, variant: variant, jsons: ctx.jsonsDir, key: ctx.productionKey || '' }).then(function (d) {
       if (seq !== loadSeq) return;
       doc = d;
       if (doc.location) ctx.entry[variant] = doc.location;
@@ -916,7 +917,7 @@ NML.editor = (function () {
     var link = e.target.closest && e.target.closest('[data-open-variant]');
     if (!link) return;
     e.preventDefault();
-    C.openFile(ctx.video, link.getAttribute('data-open-variant'), ctx.jsonsDir);
+    C.openFile(ctx.video, link.getAttribute('data-open-variant'), ctx.jsonsDir, ctx.productionKey);
   }
 
   // ------------------------------------------------------------------ вариант
@@ -941,8 +942,9 @@ NML.editor = (function () {
       var f = docFields[name];
       if (f.type !== 'any' && ATTRIBUTE_NAME_RE.test(name) && JSON.stringify(f) !== JSON.stringify(originalDocFields[name])) fields[name] = f;
     });
-    return { video: ctx.video, jsons_dir: ctx.jsonsDir, base_variant: ctx.variant, target_variant: target,
-             changes: changes, fields: fields, dry_run: dryRun, confirm_production: !!confirmProduction };
+    return { video: ctx.video, jsons_dir: ctx.jsonsDir, production_key: ctx.productionKey || null,
+      base_variant: ctx.variant, target_variant: target,
+      changes: changes, fields: fields, dry_run: dryRun, confirm_production: !!confirmProduction };
   }
   function setSaving(busy) {
     ['sidecar', 'production'].forEach(function (t) { el('nml-save-' + t).disabled = busy || !(ctx.entry[t] || {}).path; });

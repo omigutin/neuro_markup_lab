@@ -19,7 +19,8 @@ class FileOpener(Protocol):
 
 def _location_dict(location: MarkupLocation) -> dict[str, JsonValue]:
     return {'variant': location.variant.value, 'name': location.name, 'exists': location.exists,
-            'path': str(location.path) if location.path else None, 'reason': location.reason}
+            'path': str(location.path) if location.path else None, 'reason': location.reason,
+            'key': location.key, 'manual': location.manual}
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,8 +28,8 @@ class VideoEntry:
     """ Видео в списке страницы и наличие его разметки. """
     path: Path
     relative_dir: str
+    # Производство видео (если хозяин передал список производств)
     factory: str | None
-    cam_id: str | None
     sidecar: MarkupLocation
     production: MarkupLocation
 
@@ -45,7 +46,7 @@ class VideoEntry:
         default = self.default_variant
         return {
             'path': str(self.path), 'name': self.path.name, 'stem': self.path.stem,
-            'relative_dir': self.relative_dir, 'factory': self.factory, 'cam_id': self.cam_id,
+            'relative_dir': self.relative_dir, 'factory': self.factory,
             'sidecar': _location_dict(self.sidecar), 'production': _location_dict(self.production),
             'default_variant': default.value if default else None,
         }
@@ -123,6 +124,8 @@ class SaveRequest:
     dry_run: bool
     # Пользователь подтвердил перезапись боевого JSON
     confirm_production: bool
+    # Боевая разметка, выбранная пользователем вручную (ключ файла в каталоге); ``None`` — подобрать
+    production_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

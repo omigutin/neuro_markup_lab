@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from neuro_markup_lab.lab import MarkupLabService
-from neuro_markup_lab.web import FolderPickerError, mount_app
+from neuro_markup_lab.web import PathPickerError, PickKind, mount_app
 
 from ..conftest import read_json
 
@@ -29,14 +29,14 @@ PREFIX = '/x/lab'
 
 class _Picker:
     def __init__(self) -> None:
-        self.initial: list[str] = []
+        self.calls: list[tuple[PickKind, str]] = []
         self.result: str | None = '/picked'
         self.error = False
 
-    def __call__(self, initial: str) -> str | None:
-        self.initial.append(initial)
+    def __call__(self, kind: PickKind, initial: str) -> str | None:
+        self.calls.append((kind, initial))
         if self.error:
-            raise FolderPickerError('no tkinter')
+            raise PathPickerError('no tkinter')
         return self.result
 
 
@@ -49,7 +49,7 @@ def picker() -> _Picker:
 def client(opener, picker) -> TestClient:
     app = FastAPI()
     mount_app(app, PREFIX, MarkupLabService(opener=opener), nav_renderer=lambda: '<nav data-active="markup"></nav>',
-              folder_picker=picker)
+              path_picker=picker)
     return TestClient(app)
 
 
@@ -87,14 +87,17 @@ def test_locations_api(client, workspace):
     ws = workspace(sidecar=True)
     data = client.get(f'{PREFIX}/api/locations', params={'video': str(ws['video']), 'jsons': str(ws['jsons'])}).json()
     assert data['ok'] and data['sidecar']['exists'] and data['production']['exists']
-    assert data['default_variant'] == 'sidecar' and (data['factory'], data['cam_id']) == ('plant', '5')
+    assert data['default_variant'] == 'sidecar' and data['production']['key'] == 'plant_cam5'
     missing = client.get(f'{PREFIX}/api/locations', params={'video': str(ws['videos'] / 'none.avi')})
     assert missing.status_code == 404
 
 
 def test_pick_api(client, picker):
     assert client.post(f'{PREFIX}/api/pick', json={'initial': 'D:/v'}).json() == {'ok': True, 'path': '/picked'}
-    assert picker.initial == ['D:/v']
+    assert picker.calls == [(PickKind.DIR, 'D:/v')]
+    client.post(f'{PREFIX}/api/pick', json={'kind': 'json', 'initial': 'D:/j'})
+    assert picker.calls[-1] == (PickKind.JSON, 'D:/j')
+    assert client.post(f'{PREFIX}/api/pick', json={'kind': 'x'}).json()['ok'] is False
     picker.result = None
     assert client.post(f'{PREFIX}/api/pick', json={}).json() == {'ok': True, 'path': None}
     picker.error = True
@@ -162,3 +165,17 @@ def test_open_file_api(client, opener, workspace):
     assert client.post(f'{PREFIX}/api/open-file', json={**body, 'variant': 'x'}).json()['ok'] is False
     assert client.post(f'{PREFIX}/api/open-file', json={**body, 'variant': 'sidecar'}).json()['ok'] is False
     assert client.post(f'{PREFIX}/api/open-file', json=[1]).json()['ok'] is False
+
+
+def test_locations_and_markup_with_manual_key(client, workspace):
+    ws = workspace()
+    (ws['jsons'] / 'line_a.json').write_text(ws['production'].read_text(encoding='utf-8'), encoding='utf-8')
+    params = {'video': str(ws['video']), 'jsons': str(ws['jsons'])}
+    chosen = str(ws['jsons'] / 'line_a.json')
+    data = client.get(f'{PREFIX}/api/locations', params={**params, 'production': chosen}).json()
+    assert data['production']['key'] == 'line_a' and data['production']['manual']
+    outside = str(ws['videos'] / 'a.json')
+    bad = client.get(f'{PREFIX}/api/locations', params={**params, 'production': outside})
+    assert bad.status_code == 404
+    markup = client.get(f'{PREFIX}/api/markup', params={**params, 'variant': 'production', 'key': 'line_a'}).json()
+    assert markup['location']['key'] == 'line_a'

@@ -7,10 +7,7 @@ import socket
 import threading
 import urllib.request
 import webbrowser
-from collections.abc import Iterable
 
-from ..lab import MarkupLabService
-from ..storage import CameraNameParser
 from .web_app import create_app
 from .web_types import APP_ID, DEFAULT_PORT
 
@@ -54,11 +51,9 @@ def find_port(host: str, port: int) -> tuple[int, bool]:
     raise OSError(f'No free port in range {port}-{port + _PORT_ATTEMPTS - 1}')
 
 
-def run(host: str = '127.0.0.1', port: int = DEFAULT_PORT, open_browser: bool = True,
-        factories: Iterable[str] = ()) -> None:
+def run(host: str = '127.0.0.1', port: int = DEFAULT_PORT, open_browser: bool = True) -> None:
     """
-        Запускает редактор со своей страницей. ``factories`` — известные фабрики: по ним камера видео
-        ищется в пути; без списка фабрика берётся из имени файла перед ``cam<N>``.
+        Запускает редактор со своей страницей. Боевая разметка видео подбирается по файлам каталога JSON.
         Если редактор уже запущен — открывает его в браузере; если порт занят другой программой — берёт следующий.
     """
     import uvicorn
@@ -72,7 +67,7 @@ def run(host: str = '127.0.0.1', port: int = DEFAULT_PORT, open_browser: bool = 
         return
     if free_port != port:
         print(f'Порт {port} занят другой программой, использую {free_port}.')
-    app = create_app(MarkupLabService(camera_resolver=CameraNameParser(factories)))
+    app = create_app()
     print(f'Редактор разметки: {url} (остановить — Ctrl+C)')
     if open_browser:
         threading.Timer(_BROWSER_DELAY_S, lambda: webbrowser.open(url)).start()

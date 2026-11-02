@@ -6,7 +6,7 @@ neuro_markup_lab — редактор разметки зон (LabelMe JSON) п�
 подпакет :mod:`neuro_markup_lab.web`, ставится отдельно (часть ``[web]``).
 """
 
-from .lab import MarkupLabService
+from .lab import MarkupLabHost, MarkupLabService
 from .markup import (
     AttributeSpec,
     AttributeType,
@@ -19,9 +19,7 @@ from .markup import (
     ShapeType,
 )
 from .storage import (
-    CameraKey,
-    CameraNameParser,
-    CameraResolver,
+    MarkupKeyResolver,
     MarkupLocation,
     MarkupSource,
     MarkupVariant,
@@ -34,12 +32,11 @@ __version__ = "0.1.0"
 __all__ = [
     "AttributeSpec",
     "AttributeType",
-    "CameraKey",
-    "CameraNameParser",
-    "CameraResolver",
     "MarkupAttributeSchema",
     "MarkupDocument",
     "MarkupError",
+    "MarkupKeyResolver",
+    "MarkupLabHost",
     "MarkupLabService",
     "MarkupLocation",
     "MarkupShape",
