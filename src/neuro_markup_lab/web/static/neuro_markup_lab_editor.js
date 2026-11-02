@@ -55,13 +55,13 @@ NML.editor = (function () {
   var DEFAULT_URLS = { markup: 'api/markup', save: 'api/save', frame: 'frame', locations: 'api/locations',
                        versions: 'api/versions', versionCurrent: 'api/versions/current', versionUpdate: 'api/versions/update' };
   // Как версия появилась (подписи в списке версий)
-  var ORIGIN_LABELS = { initial: 'исходная', external: 'изменена вне редактора', sync: 'синхронизация', editor: '' };
+  // Откуда версия — показывается вместо комментария, если его нет
+  var ORIGIN_LABELS = { initial: '', external: 'изменена вне редактора', sync: 'синхронизация', editor: '' };
   // Разметка окна редактора: вставляется в страницу при первом открытии
   var EDITOR_HTML = 'static/neuro_markup_lab_editor.html';
 
   var ctx = null;            // {video, videoName, jsonsDir, productionKey, version, entry, variant, urls, onSaved}
   var versions = null;       // список версий разметки рядом с видео (ответ /api/versions)
-  var compare = null;        // сравниваемая версия: {number, doc}
   var domReady = null;       // загрузка окна редактора (Promise)
   var doc = null;            // ответ /api/markup
   var known = {};            // известные поля модели фигуры: имя → spec
@@ -91,7 +91,7 @@ NML.editor = (function () {
   function open(context) {
     ensureDom().then(function () {
       ctx = Object.assign({}, context);
-      versions = null; compare = null;
+      versions = null;
       ctx.urls = Object.assign({}, DEFAULT_URLS, context.urls || {});
       ctx.jsonsDir = ctx.jsonsDir || '';
       ctx.videoName = ctx.videoName || String(ctx.video || '').split(/[\\/]/).pop();
@@ -141,7 +141,7 @@ NML.editor = (function () {
     // Прежний кадр остаётся на месте до загрузки новой разметки: вёрстка не прыгает
     var canvas = el('nml-editor-canvas');
     if (svg) canvas.classList.add('nml-loading'); else canvas.innerHTML = '<div>Загрузка…</div>';
-    svg = null; handlesLayer = null; shapes = []; selectedIndex = -1; compare = null;
+    svg = null; handlesLayer = null; shapes = []; selectedIndex = -1;
     C.getJson(ctx.urls.markup, { video: ctx.video, variant: variant, jsons: ctx.jsonsDir, key: ctx.productionKey || '',
                                  version: ctx.version == null ? '' : ctx.version }).then(function (d) {
       if (seq !== loadSeq) return;
@@ -168,7 +168,6 @@ NML.editor = (function () {
     selectedIndex = shapes.length ? shapes[0].index : -1;
     activeVertex = -1;
     buildScene();
-    drawCompare();
     renderAll();
   }
   function show() {
@@ -709,7 +708,11 @@ NML.editor = (function () {
     var title = n == null ? 'Файл изменён вне версий' : 'v' + n + (v && v.comment ? ' — ' + v.comment : '') + '. Выбрать версию';
     host.insertAdjacentHTML('beforeend', '<button type="button" class="nml-ver-seg" data-ver-toggle title="' + esc(title) + '">'
       + (n != null ? 'v' + n : 'вне версий') + ' ▾</button>');
-    host.querySelector('[data-ver-toggle]').addEventListener('click', function (e) { e.stopPropagation(); toggleVersions(); });
+    var seg = host.querySelector('[data-ver-toggle]');
+    seg.addEventListener('click', function (e) { e.stopPropagation(); toggleVersions(); });
+    // Кнопка версии шириной как «Боевая»: переключатель симметричен
+    var prod = host.querySelector('[data-variant="production"]');
+    if (prod && prod.offsetWidth) seg.style.minWidth = prod.offsetWidth + 'px';
   }
   // Кнопка «в боевой JSON» неактивна, если путь боевого JSON не определён; «в версию» — только для открытой версии
   function renderSaveButtons() {
@@ -1099,47 +1102,29 @@ NML.editor = (function () {
     function two(n) { return (n < 10 ? '0' : '') + n; }
     return two(d.getDate()) + '.' + two(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + two(d.getHours()) + ':' + two(d.getMinutes());
   }
-  // Список версий рядом с видео: звёздочка, номер, комментарий, время, «текущая» отдельным столбцом, «Сравнить».
+  // Список версий рядом с видео: ★ (избранное), номер, время, комментарий. Текущая видна на кнопке «vN ▾».
   // Щелчок по строке делает версию текущей и открывает её.
   function renderVersions() {
     var panel = el('nml-versions');
     var list = ((versions && versions.versions) || []).slice().reverse();
-    var current = versions ? versions.current : null;
-    var cmp = compare ? '<div class="nml-versions-compare">' + compareSummary()
-      + ' <button type="button" class="nml-btn nml-btn-small" data-compare-off>Убрать сравнение</button></div>' : '';
     if (!list.length) { panel.innerHTML = '<div class="muted nml-versions-empty">Версий пока нет: они появятся при сохранении рядом с видео.</div>'; return; }
-    panel.innerHTML = cmp + '<div class="nml-versions-list">' + list.map(function (v) {
-      var isCurrent = v.number === current;
-      var meta = [fmtTime(v.updated !== v.created ? v.updated : v.created)];
-      if (ORIGIN_LABELS[v.origin]) meta.push(ORIGIN_LABELS[v.origin]);
-      return '<div class="nml-ver' + (isCurrent ? ' current' : '') + '" data-ver="' + v.number + '"'
-        + ' title="' + (isCurrent ? 'Текущая версия' : 'Сделать текущей и открыть') + '">'
+    panel.innerHTML = '<div class="nml-versions-list">' + list.map(function (v) {
+      var comment = v.comment ? esc(v.comment) : (ORIGIN_LABELS[v.origin] ? '<span class="muted">' + esc(ORIGIN_LABELS[v.origin]) + '</span>' : '');
+      return '<div class="nml-ver" data-ver="' + v.number + '" title="Сделать текущей и открыть">'
         + '<button type="button" class="nml-ver-pin' + (v.pinned ? ' on' : '') + '" data-pin="' + v.number + '" title="' + (v.pinned ? 'Убрать из избранного' : 'В избранное') + '">★</button>'
         + '<b class="nml-ver-n">v' + v.number + '</b>'
-        + '<span class="nml-ver-comment">' + esc(v.comment || '') + '</span>'
-        + '<span class="muted nml-ver-meta">' + esc(meta.join(' · ')) + '</span>'
-        + '<span class="nml-ver-cur">' + (isCurrent ? 'текущая' : '') + '</span>'
-        + (v.number === openVersion() ? '<span></span>'
-          : '<button type="button" class="nml-btn nml-btn-small" data-compare="' + v.number + '" title="Показать контуры этой версии поверх открытой">Сравнить</button>')
+        + '<span class="muted nml-ver-meta">' + esc(fmtTime(v.updated !== v.created ? v.updated : v.created)) + '</span>'
+        + '<span class="nml-ver-comment">' + comment + '</span>'
         + '</div>';
     }).join('') + '</div>';
   }
   function onVersionsClick(e) {
     var t = e.target;
-    if (t.closest('[data-compare-off]')) { setCompare(null); return; }
     var pin = t.closest('[data-pin]');
     if (pin) {
       var n = +pin.getAttribute('data-pin'), v = versionByNumber(n);
       C.postJson(ctx.urls.versionUpdate, { video: ctx.video, number: n, pinned: !(v && v.pinned) }).then(refreshVersions)
         .catch(function (err) { C.toast(err.message, true); });
-      return;
-    }
-    var cmp = t.closest('[data-compare]');
-    if (cmp) {
-      var number = +cmp.getAttribute('data-compare');
-      C.getJson(ctx.urls.markup, { video: ctx.video, variant: 'sidecar', jsons: ctx.jsonsDir, version: number }).then(function (d) {
-        setCompare({ number: number, doc: d });
-      }).catch(function (err) { C.toast(err.message, true); });
       return;
     }
     var row = t.closest('[data-ver]');
@@ -1162,41 +1147,6 @@ NML.editor = (function () {
     if (!isDirty()) { run(); return; }
     confirmDialog('Сделать v' + n + ' текущей?', 'Несохранённые изменения в редакторе будут потеряны.', 'Сделать текущей', run);
   }
-  // Сравнение: контуры другой версии пунктиром поверх кадра и сводка отличий
-  function setCompare(value) {
-    compare = value;
-    drawCompare();
-    renderVersions();
-  }
-  function drawCompare() {
-    if (!svg) return;
-    var old = svg.querySelector('.nml-ghost');
-    if (old) old.remove();
-    if (!compare) return;
-    var g = document.createElementNS(SVGNS, 'g');
-    g.setAttribute('class', 'nml-ghost');
-    (compare.doc.shapes || []).forEach(function (s) {
-      if ((s.points || []).length) g.appendChild(C.createGeom(s.shape_type, s.points, 'nml-ghost-geom'));
-    });
-    svg.insertBefore(g, handlesLayer);
-  }
-  function compareSummary() {
-    var other = compare.doc.shapes || [], mine = shapes, byIndex = {};
-    other.forEach(function (s) { byIndex[s.index] = s; });
-    var changed = [];
-    mine.forEach(function (a) {
-      var b = byIndex[a.index], what = [];
-      if (!b) return;
-      if (JSON.stringify(a.current) !== JSON.stringify(b.points) || a.shape_type !== b.shape_type) what.push('форма');
-      if (JSON.stringify(a.attrs) !== JSON.stringify(b.attributes || {})) what.push('атрибуты');
-      if (what.length) changed.push('#' + a.index + ' ' + what.join(', '));
-    });
-    var parts = ['Сравнение с v' + compare.number + ' (пунктир)'];
-    if (other.length !== mine.length) parts.push('объектов там ' + other.length + ', здесь ' + mine.length);
-    parts.push(changed.length ? 'отличаются: ' + changed.join('; ') : (other.length === mine.length ? 'объекты совпадают' : ''));
-    return esc(parts.filter(Boolean).join(' · '));
-  }
-
   // ------------------------------------------------------------------ диалог
   function confirmDialog(title, bodyHtml, okText, onOk) {
     el('nml-dialog-title').textContent = title;

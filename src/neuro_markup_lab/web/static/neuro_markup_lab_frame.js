@@ -111,7 +111,7 @@ NML.frame = (function () {
     }
     // Версии разметки рядом с видео — для выбора в панели
     function loadVersions() {
-      if (!info || !state.entry || !(state.entry.sidecar || {}).exists) { state.versions = null; return Promise.resolve(); }
+      if (!state.entry || !(state.entry.sidecar || {}).exists) { state.versions = null; return Promise.resolve(); }
       return C.getJson(urls.versions, { video: o.video }).then(function (d) { state.versions = d; render(); })
         .catch(function () { state.versions = null; });
     }
@@ -155,6 +155,7 @@ NML.frame = (function () {
     function render() {
       if (!state.alive || !state.entry) return;
       C.renderSwitch(switchHost, state.entry, state.variant, setVariant);
+      renderVersionSwitch();
       if (editBtn) {
         editBtn.disabled = !state.variant;
         editBtn.title = state.variant ? 'Редактировать разметку' : 'Нет ни JSON рядом с видео, ни боевого JSON';
@@ -187,7 +188,6 @@ NML.frame = (function () {
         ? '<button type="button" class="nml-info-open" data-choose-production title="Открыть другой файл боевой разметки для этого видео…">' + FOLDER_ICON + '</button>' : '';
       var auto = variant === 'production' && jsonsDir && loc.manual
         ? '<button type="button" class="nml-btn nml-btn-small" data-auto-production title="Вернуть подбор по каталогу">Подбирать автоматически</button>' : '';
-      var versionsRow = variant === 'sidecar' ? versionsHtml() : '';
       var selectable = loc.exists && !active;
       return '<div class="nml-info-file nml-v-' + variant + (active ? ' active' : '') + (loc.exists ? '' : ' missing') + (selectable ? ' selectable' : '') + '"'
         + (selectable ? ' data-select-variant="' + variant + '" title="Показать эту разметку"' : '') + '>'
@@ -195,7 +195,7 @@ NML.frame = (function () {
         + '<div class="nml-info-file-head"><b>' + esc(C.VARIANT_LABELS[variant]) + '</b>' + copy
         + (loc.manual ? '<span class="nml-tag">выбрана вручную</span>' : '') + auto
         + '</div>'
-        + '<div class="nml-info-path">' + path + '</div>' + versionsRow + '</div>' + choose + '</div>';
+        + '<div class="nml-info-path">' + path + '</div></div>' + choose + '</div>';
     }
     function fmtTime(iso) {
       var d = new Date(iso);
@@ -203,34 +203,36 @@ NML.frame = (function () {
       function two(n) { return (n < 10 ? '0' : '') + n; }
       return two(d.getDate()) + '.' + two(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + two(d.getHours()) + ':' + two(d.getMinutes());
     }
-    // Версия разметки рядом с видео: свой список (номер, комментарий, время, «текущая» отдельным столбцом).
-    // Выбранная версия сразу становится текущей — файл рядом с видео становится равен ей.
-    function versionRow(v, current) {
-      return '<span class="nml-vsel-n">v' + v.number + '</span>'
-        + '<span class="nml-vsel-c" title="' + esc(v.comment || '') + '">' + esc(v.comment || '') + '</span>'
-        + '<span class="nml-vsel-d">' + esc(fmtTime(v.updated)) + (v.pinned ? ' ★' : '') + '</span>'
-        + '<span class="nml-vsel-cur">' + (v.number === current ? 'текущая' : '') + '</span>';
-    }
-    function versionsHtml() {
+    // Версии разметки рядом с видео — на кадре, в переключателе: «Боевая | Рядом с видео | vN ▾».
+    // Список: ★ (избранное), номер, время, комментарий; выбранная версия сразу становится текущей —
+    // файл рядом с видео становится равен ей.
+    function versionsList() {
       var h = state.versions;
-      if (!h || !(h.versions || []).length) return '';
-      var list = h.versions.slice().reverse();
-      var current = h.current;
-      // Файл рядом с видео изменён вне версий: текущей версии ему нет
-      var outside = state.variant === 'sidecar' && state.doc && state.doc.markup_version == null;
-      var shown = outside ? null : list.filter(function (v) { return v.number === current; })[0];
-      var button = shown ? versionRow(shown, current)
-        : '<span class="nml-vsel-n">—</span><span class="nml-vsel-c">изменён вне версий</span><span></span><span></span>';
-      var rows = list.map(function (v) {
-        return '<div class="nml-vsel-row' + (v.number === current ? ' current' : '') + '" data-version-pick="' + v.number + '"'
-          + ' title="' + (v.number === current ? 'Текущая версия' : 'Сделать текущей: файл рядом с видео станет равен этой версии') + '">'
-          + versionRow(v, current) + '</div>';
-      }).join('');
-      return '<div class="nml-info-versions"><span class="muted">Версия</span>'
-        + '<div class="nml-vsel' + (state.versionsOpen ? ' open' : '') + '">'
-        + '<button type="button" class="nml-vsel-btn" data-vsel-toggle title="Выбрать версию">' + button + '<i>▾</i></button>'
-        + (state.versionsOpen ? '<div class="nml-vsel-list">' + rows + '</div>' : '')
-        + '</div></div>';
+      return h && (h.versions || []).length ? h.versions.slice().reverse() : [];
+    }
+    // Файл рядом с видео изменён вне версий: текущей версии ему нет
+    function outsideVersions() { return state.variant === 'sidecar' && state.doc && state.doc.markup_version == null; }
+    function renderVersionSwitch() {
+      var list = versionsList();
+      var old = box.querySelector('.nml-vsel-list');
+      if (old) old.remove();
+      if (state.variant !== 'sidecar' || !list.length) return;
+      var current = outsideVersions() ? null : state.versions.current;
+      var shown = list.filter(function (v) { return v.number === current; })[0];
+      var title = shown ? 'v' + shown.number + (shown.comment ? ' — ' + shown.comment : '') + '. Выбрать версию' : 'Файл изменён вне версий. Выбрать версию';
+      switchHost.insertAdjacentHTML('beforeend', '<button type="button" class="nml-ver-seg" data-vsel data-vsel-toggle title="' + esc(title) + '">'
+        + (shown ? 'v' + shown.number : 'вне версий') + ' ▾</button>');
+      var seg = switchHost.querySelector('[data-vsel-toggle]');
+      var prod = switchHost.querySelector('[data-variant="production"]');
+      if (prod && prod.offsetWidth) seg.style.minWidth = prod.offsetWidth + 'px';
+      if (!state.versionsOpen) return;
+      box.insertAdjacentHTML('beforeend', '<div class="nml-vsel-list" data-vsel>' + list.map(function (v) {
+        return '<div class="nml-vsel-row" data-version-pick="' + v.number + '" title="Сделать текущей">'
+          + '<span class="nml-vsel-star' + (v.pinned ? ' on' : '') + '" title="' + (v.pinned ? 'В избранном' : '') + '">★</span>'
+          + '<span class="nml-vsel-n">v' + v.number + '</span>'
+          + '<span class="nml-vsel-d">' + esc(fmtTime(v.updated)) + '</span>'
+          + '<span class="nml-vsel-c" title="' + esc(v.comment || '') + '">' + esc(v.comment || '') + '</span></div>';
+      }).join('') + '</div>');
     }
     function summaryHtml(doc) {
       var shapes = doc.shapes || [];
@@ -257,7 +259,7 @@ NML.frame = (function () {
         return (ia < 0 ? 1e6 : ia) - (ib < 0 ? 1e6 : ib) || (a < b ? -1 : a > b ? 1 : 0);
       });
       var coords = points.map(function (p, i) {
-        return '<span class="nml-pt"><i>P' + (i + 1) + '</i>' + coord(p[0]) + ', ' + coord(p[1]) + '</span>';
+        return '<div class="nml-info-attr nml-info-pt"><span>P' + (i + 1) + '</span><div>' + coord(p[0]) + ', ' + coord(p[1]) + '</div></div>';
       }).join('');
       var rows = names.map(function (k) {
         var title = known[k] && known[k].title ? ' title="' + esc(known[k].title + (known[k].hint ? ' — ' + known[k].hint : '')) + '"' : '';
@@ -270,8 +272,8 @@ NML.frame = (function () {
         + (hidden ? ' title="show: false — фигура не рисуется"' : '') + '>'
         + '<div class="nml-obj-head"><span class="nml-obj-n">#' + s.index + '</span><b>' + esc(label) + '</b>'
         + '<span class="muted">' + esc(s.shape_type || '—') + '</span></div>'
-        + '<div class="nml-pts">' + (coords || '<span class="muted">точек нет</span>') + '</div>'
-        + (rows ? '<div class="nml-info-attrs">' + rows + '</div>' : '')
+        + '<div class="nml-info-attrs">' + (coords || '<div class="nml-info-attr"><span>точки</span><div class="muted">нет</div></div>')
+        + (rows ? '<div class="nml-info-sep"></div>' + rows : '') + '</div>'
         + '</div>';
     }
     function docFieldsHtml(doc) {
@@ -301,7 +303,7 @@ NML.frame = (function () {
         + '<div class="nml-info-files">' + VARIANTS.map(fileCard).join('') + '</div></section>'
         + '<section class="nml-info-sec nml-info-content">' + contentHtml() + '</section>'
         + '<div class="nml-info-foot"><button type="button" class="nml-btn" data-open-video title="Открыть видео в программе по умолчанию">Открыть видео</button>'
-        + (o.editable ? '<button type="button" class="nml-btn nml-btn-primary" data-open-editor' + (state.variant ? '' : ' disabled') + ' title="Открыть редактор разметки">Открыть редактор</button>' : '')
+        + (o.editable ? '<button type="button" class="nml-btn nml-btn-dark" data-open-editor' + (state.variant ? '' : ' disabled') + ' title="Открыть редактор разметки">Открыть редактор</button>' : '')
         + '</div>';
     }
 
@@ -371,7 +373,7 @@ NML.frame = (function () {
         e.stopPropagation();
         var n = +pick.getAttribute('data-version-pick');
         state.versionsOpen = false;
-        if (state.versions && n === state.versions.current && !(state.doc && state.variant === 'sidecar' && state.doc.markup_version == null)) {
+        if (state.versions && n === state.versions.current && !outsideVersions()) {
           if (state.variant !== 'sidecar') setVariant('sidecar'); else render();
           return;
         }
@@ -404,7 +406,7 @@ NML.frame = (function () {
     host.addEventListener('click', onClick);
     // Щелчок вне списка версий закрывает его
     function onOutside(e) {
-      if (state.versionsOpen && !(e.target.closest && e.target.closest('.nml-vsel'))) { state.versionsOpen = false; render(); }
+      if (state.versionsOpen && !(e.target.closest && e.target.closest('[data-vsel]'))) { state.versionsOpen = false; render(); }
     }
     document.addEventListener('click', onOutside);
     if (info) { info.addEventListener('mouseover', onOver); info.addEventListener('mouseleave', function () { highlight(null); }); }
