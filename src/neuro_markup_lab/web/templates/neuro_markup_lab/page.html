@@ -6,7 +6,7 @@
   <title>Разметка — NeuroMarkupLab</title>
   <link rel="stylesheet" href="static/neuro_markup_lab.css">
 </head>
-<body>
+<body class="nml-body">
   {{ nav | safe }}
   <main class="nml-page" id="nml-page">
     {# Каталоги: видео (с подкаталогами) и боевые JSON. Значения помнит браузер. #}
@@ -29,7 +29,7 @@
                  placeholder="напр. D:\markup\plant">
           <button type="button" class="nml-btn" data-pick="nml-jsons-dir">Выбрать</button>
         </div>
-        <div class="nml-hint muted">Боевые JSON камер: &lt;factory&gt;_cam&lt;N&gt;.json</div>
+        <div class="nml-hint muted">Боевая подбирается по имени и пути видео; у видео можно выбрать файл вручную</div>
       </div>
       <div class="nml-field nml-field-filter">
         <label class="nml-label" for="nml-filter">Фильтр</label>
@@ -43,6 +43,7 @@
 
   <script src="static/neuro_markup_lab_shapes.js"></script>
   <script src="static/neuro_markup_lab_editor.js"></script>
+  <script src="static/neuro_markup_lab_frame.js"></script>
   <script src="static/neuro_markup_lab_page.js"></script>
 </body>
 </html>

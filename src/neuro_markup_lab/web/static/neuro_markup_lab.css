@@ -1,11 +1,12 @@
-/* NeuroMarkupLab: страница списка видео и редактор разметки. */
+/* NeuroMarkupLab: страница списка видео, модуль кадра и редактор разметки.
+   Стили страницы — под body.nml-body; модуль кадра и редактор можно подключать в чужие страницы. */
 :root {
   --nml-bg: #f4f5f7; --nml-panel: #fff; --nml-text: #1c1e21; --nml-muted: #6b7280;
   --nml-border: #e2e4e8; --nml-border-strong: #cdd2da; --nml-accent: #4f6228; --nml-accent-soft: #f1f4ec;
   --nml-warn: #b8860b; --nml-error: #b3261e; --nml-select: #ffc400; --nml-shape: #7ea33a;
 }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: var(--nml-bg); color: var(--nml-text); font-size: 13px; }
+body.nml-body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: var(--nml-bg); color: var(--nml-text); font-size: 13px; }
 .hidden { display: none !important; }
 .muted { color: var(--nml-muted); }
 .nml-page { max-width: 1600px; margin: 16px auto; padding: 0 20px; }
@@ -48,13 +49,13 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: var(--n
 .nml-video-cam { color: var(--nml-muted); font-size: 12px; flex: 0 0 auto; }
 .nml-badge { font-size: 11px; border-radius: 10px; padding: 2px 8px; border: 1px solid var(--nml-border); color: var(--nml-muted); flex: 0 0 auto; }
 .nml-badge.on { border-color: #c7d4b0; background: var(--nml-accent-soft); color: var(--nml-accent); }
-.nml-video-body { padding: 0 12px 12px 34px; display: flex; flex-direction: column; gap: 8px; }
+.nml-video-body { padding: 4px 12px 12px 34px; }
 .nml-links { display: flex; flex-wrap: wrap; gap: 4px 24px; font-size: 12px; }
 .nml-links span.muted { margin-right: 6px; }
 .nml-link { color: #1d4ed8; text-decoration: none; word-break: break-all; cursor: pointer; }
 .nml-link:hover { text-decoration: underline; }
 /* Кадр — на ширину карточки, но не крупнее 960 px, чтобы список оставался обозримым */
-.nml-preview { position: relative; width: 100%; max-width: 960px; background: #0f1216; border-radius: 8px; overflow: hidden; line-height: 0; }
+.nml-preview { position: relative; width: 100%; background: #0f1216; border-radius: 8px; overflow: hidden; line-height: 0; }
 .nml-preview img { width: 100%; display: block; }
 .nml-preview-ph { color: #9ca3af; line-height: 1.4; padding: 40px 16px; text-align: center; }
 .nml-preview-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -190,4 +191,26 @@ details > summary.nml-side-h { cursor: pointer; }
   .nml-video-body { flex-direction: column; padding-left: 12px; }
   .nml-editor-body { flex-direction: column; }
   .nml-editor-side { flex: 0 0 auto; max-height: 45%; }
+}
+
+/* ---- модуль кадра: кадр слева, сведения справа */
+.nml-frame { display: flex; align-items: flex-start; gap: 18px; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: var(--nml-text); }
+.nml-frame-view { flex: 0 1 960px; min-width: 0; }
+.nml-frame-info { flex: 1 1 300px; min-width: 260px; max-width: 560px; display: flex; flex-direction: column; gap: 14px; font-size: 12px; }
+.nml-info-sec { display: flex; flex-direction: column; gap: 6px; }
+.nml-info-h { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--nml-muted); }
+.nml-info-file { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px solid var(--nml-border); border-radius: 8px; background: #fafbfc; }
+.nml-info-label { font-weight: 600; }
+.nml-info-value { word-break: break-all; }
+.nml-info-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.nml-info-path { word-break: break-all; color: var(--nml-muted); }
+.nml-btn-small { padding: 4px 9px; font-size: 12px; border-radius: 6px; }
+.nml-tag { font-size: 10px; font-weight: 600; border-radius: 8px; padding: 1px 6px; background: #fff4d6; color: var(--nml-warn); margin-left: 4px; }
+.nml-frame .nml-kv > div { min-width: 0; word-break: break-word; }
+.nml-ok-text { color: var(--nml-accent); }
+.nml-warn-text { color: var(--nml-warn); }
+.nml-error-text { color: var(--nml-error); }
+@media (max-width: 1100px) {
+  .nml-frame { flex-direction: column; }
+  .nml-frame-view, .nml-frame-info { flex: 0 0 auto; width: 100%; max-width: none; }
 }

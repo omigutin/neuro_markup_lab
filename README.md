@@ -79,23 +79,33 @@ mount_app(app, "/neuro-markup-lab",
 Страница — `/neuro-markup-lab/`, все адреса на ней относительные, поэтому префикс любой.
 `create_app(...)` возвращает то же приложение без встраивания.
 
-## Редактор в чужой странице
+## Кадр с разметкой и редактор в чужой странице
 
 ```html
 <link rel="stylesheet" href="/neuro-markup-lab/static/neuro_markup_lab.css">
 <script src="/neuro-markup-lab/static/neuro_markup_lab_shapes.js"></script>
 <script src="/neuro-markup-lab/static/neuro_markup_lab_editor.js"></script>
-<script>
-  NML.editor.open({
-    video: "D:/video/plant_cam5.avi",   // путь к видео на компьютере сервера
-    jsonsDir: "D:/markup/plant",         // каталог боевых JSON; нет — только «рядом с видео»
-    variant: "sidecar",                  // необязательно: по умолчанию «рядом с видео», если есть
-    productionKey: "norebo_cam25",       // необязательно: боевая разметка, выбранная вручную
-    urls: {},                            // необязательно: свои адреса markup, save, frame, locations
-    onSaved: (variant, location) => {},
-  });
-  document.addEventListener("nml:saved", (e) => console.log(e.detail));  // {video, variant, location}
-</script>
+<script src="/neuro-markup-lab/static/neuro_markup_lab_frame.js"></script>
+```
+
+Кадр с разметкой, переключателем «Боевая | Рядом с видео» и карандашом редактора — в любой элемент:
+
+```js
+const frame = NML.frame.mount(document.getElementById("slot"), {
+  video: "D:/video/plant_cam5.avi",   // путь к видео на компьютере сервера
+  jsonsDir: "D:/markup/plant",         // каталог боевых JSON; нет — только «рядом с видео»
+  productionKey: null,                 // боевая, выбранная вручную; нет — подбирается
+  details: true,                       // панель справа: файлы разметки, выбор боевой вручную, сведения
+  onProductionKey: (key) => {},        // запомнить выбор вручную (страница редактора хранит его в браузере)
+  onSaved: (variant, location) => {},
+});
+```
+
+Только редактор, без кадра:
+
+```js
+NML.editor.open({ video, jsonsDir, variant, productionKey, urls, onSaved });
+document.addEventListener("nml:saved", (e) => console.log(e.detail));  // {video, variant, location}
 ```
 
 Окно редактора вставляется в страницу при первом открытии. Адрес API берётся из адреса скрипта;

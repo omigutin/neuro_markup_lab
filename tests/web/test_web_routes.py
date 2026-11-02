@@ -59,7 +59,7 @@ def test_page_renders_with_nav_and_relative_static(client):
     html = response.text
     assert 'data-active="markup"' in html
     names = ('neuro_markup_lab.css', 'neuro_markup_lab_shapes.js', 'neuro_markup_lab_editor.js',
-             'neuro_markup_lab_page.js')
+             'neuro_markup_lab_frame.js', 'neuro_markup_lab_page.js')
     for name in names:
         assert f'"static/{name}"' in html
         static = client.get(f'{PREFIX}/static/{name}')

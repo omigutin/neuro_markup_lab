@@ -1,12 +1,14 @@
-// Страница NeuroMarkupLab: каталог видео и каталог боевых JSON (помнит браузер), список
-// видео с раскрывающейся карточкой: ссылки на JSON (открываются программой по умолчанию), первый
-// кадр с разметкой, поверх кадра — переключатель «Боевая | Рядом с видео» и карандаш редактора.
+// Страница NeuroMarkupLab: каталог видео и каталог боевых JSON (помнит браузер), список видео
+// с раскрывающейся карточкой. Тело карточки — модуль кадра NML.frame: кадр с разметкой, переключатель
+// «Боевая | Рядом с видео», карандаш редактора, справа — файлы разметки, выбор боевой вручную, сведения.
+// Боевая, выбранная вручную, запоминается браузером для пары «каталог JSON + видео».
 // Только представление: данные — из API страницы.
 (function () {
   var C = NML.common, esc = C.esc;
   // Ключи localStorage: каталог видео, «в подкаталогах», каталог JSON
   var KEY_VIDEO_DIR = 'nml_video_dir', KEY_RECURSIVE = 'nml_recursive', KEY_JSONS_DIR = 'nml_jsons_dir';
-  var NO_MARKUP_TITLE = 'Нет ни JSON рядом с видео, ни боевого JSON';
+  // Ключ localStorage: боевая разметка, выбранная вручную: «каталог JSON\nвидео» → ключ файла
+  var KEY_MANUAL = 'nml_production_keys';
 
   var videoInput = document.getElementById('nml-video-dir');
   var jsonsInput = document.getElementById('nml-jsons-dir');
@@ -22,6 +24,13 @@
 
   function store(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* хранилище недоступно */ } }
   function restore(key) { try { return localStorage.getItem(key) || ''; } catch (e) { return ''; } }
+  function manualKeys() { try { return JSON.parse(restore(KEY_MANUAL) || '{}') || {}; } catch (e) { return {}; } }
+  function manualKey(v) { return manualKeys()[jsonsDir + '\n' + v.path] || null; }
+  function setManualKey(v, key) {
+    var all = manualKeys(), id = jsonsDir + '\n' + v.path;
+    if (key) all[id] = key; else delete all[id];
+    store(KEY_MANUAL, JSON.stringify(all));
+  }
 
   // ------------------------------------------------------------------ каталоги
   function saveInputs() {
@@ -47,15 +56,34 @@
         if (seq !== loadSeq) return;
         jsonsDir = d.jsons_dir || '';
         lastListing = d;
-        entries = (d.videos || []).map(function (v) { v.cardVariant = v.default_variant; v.cache = {}; v.open = false; return v; });
+        entries = (d.videos || []).map(function (v) { v.cardVariant = v.default_variant; v.open = false; return v; });
         renderStatus(d);
         render();
+        applyManualKeys(seq);
       }).catch(function (err) {
         if (seq !== loadSeq) return;
         entries = [];
         render();
         statusHost.innerHTML = '<span class="nml-error-text">' + esc(err.message) + '</span>';
       });
+  }
+  // Боевая, выбранная вручную, — уточнить у сервера (файл мог исчезнуть) и обновить шапки
+  function applyManualKeys(seq) {
+    entries.forEach(function (v) {
+      var key = manualKey(v);
+      if (!key) return;
+      C.getJson('api/locations', { video: v.path, jsons: jsonsDir, key: key }).then(function (d) {
+        if (seq !== loadSeq) return;
+        updateEntry(v, d);
+      }).catch(function (err) { C.toast(v.name + ': ' + err.message, true); });
+    });
+  }
+  function updateEntry(v, entry) {
+    v.sidecar = entry.sidecar; v.production = entry.production;
+    if (!v.cardVariant || !(v[v.cardVariant] || {}).exists) v.cardVariant = v.sidecar.exists ? 'sidecar' : (v.production.exists ? 'production' : null);
+    if (lastListing) renderStatus(lastListing);
+    var card = cardOf(v);
+    if (card) card.querySelector('.nml-video-head').outerHTML = headHtml(v);
   }
   function renderStatus(d) {
     var parts = ['Видео: ' + entries.length];
@@ -110,67 +138,24 @@
     return null;
   }
   function cardOf(v) { return listHost.querySelector('.nml-video[data-path="' + CSS.escape(v.path) + '"]'); }
-  // Путь JSON: есть файл — ссылка (открыть программой по умолчанию), нет — пояснение
-  function locationLink(variant, loc) {
-    var value = loc.exists
-      ? '<a href="#" class="nml-link" data-open-variant="' + variant + '" title="Открыть в программе по умолчанию">' + esc(loc.path) + '</a>'
-      : '<span class="muted">' + esc(loc.path ? 'нет файла ' + loc.name : (loc.reason || '—')) + '</span>';
-    return '<div><span class="muted">' + esc(C.VARIANT_LABELS[variant]) + ':</span>' + value + '</div>';
-  }
   function renderBody(v) {
     var card = cardOf(v);
     if (!card) return;
     var host = card.querySelector('.nml-video-body-host');
-    var canEdit = !!v.cardVariant;
-    host.innerHTML = '<div class="nml-video-body">'
-      + '<div class="nml-links">' + locationLink('sidecar', v.sidecar) + locationLink('production', v.production) + '</div>'
-      + '<div class="nml-preview"><img alt="" src="' + esc(C.frameUrl(v.path, false)) + '">'
-      + '<div class="nml-variant-switch"></div>'
-      + '<button type="button" class="nml-preview-edit" data-edit title="' + (canEdit ? 'Редактировать разметку' : NO_MARKUP_TITLE) + '"'
-      + (canEdit ? '' : ' disabled') + '>✎</button></div>'
-      + '</div>';
-    var img = host.querySelector('img');
-    img.onerror = function () { host.querySelector('.nml-preview').innerHTML = '<div class="nml-preview-ph">Кадр не прочитан</div>'; };
-    C.renderSwitch(host.querySelector('.nml-variant-switch'), v, v.cardVariant, function (variant) {
-      v.cardVariant = variant;
-      renderBody(v);
-    });
-    if (v.cardVariant) drawOverlay(v, host.querySelector('.nml-preview'));
-  }
-  function drawOverlay(v, box) {
-    var variant = v.cardVariant;
-    var promise = v.cache[variant] || (v.cache[variant] = C.getJson('api/markup', { video: v.path, variant: variant, jsons: jsonsDir }));
-    promise.then(function (doc) {
-      if (v.cardVariant !== variant || !box.isConnected) return;
-      var old = box.querySelector('.nml-preview-svg');
-      if (old) old.parentNode.removeChild(old);
-      var svg = C.buildOverlay(doc);
-      if (svg) box.insertBefore(svg, box.querySelector('.nml-variant-switch'));
-    }).catch(function (err) {
-      delete v.cache[variant];
-      C.toast('Разметка не открыта: ' + err.message, true);
+    if (v.frame) v.frame.destroy();
+    host.innerHTML = '<div class="nml-video-body"></div>';
+    v.frame = NML.frame.mount(host.firstChild, {
+      video: v.path, jsonsDir: jsonsDir, productionKey: manualKey(v), variant: v.cardVariant,
+      entry: { sidecar: v.sidecar, production: v.production, factory: v.factory }, details: true,
+      onEntry: function (entry) { updateEntry(v, entry); },
+      onVariant: function (variant) { v.cardVariant = variant; },
+      onProductionKey: function (key) { setManualKey(v, key); },
     });
   }
-  function openEditor(v) {
-    var variant = v.cardVariant || v.default_variant;
-    if (!variant) return;
-    NML.editor.open({
-      video: v.path, videoName: v.name, jsonsDir: jsonsDir, variant: variant,
-      entry: { sidecar: v.sidecar, production: v.production },
-      onSaved: function (target, location) {
-        v[target] = location;
-        v.cache = {};
-        v.cardVariant = target;
-        if (!v.default_variant) v.default_variant = target;
-        if (lastListing) renderStatus(lastListing);
-        var card = cardOf(v);
-        if (card) {
-          var head = card.querySelector('.nml-video-head');
-          head.outerHTML = headHtml(v);
-          if (v.open) renderBody(v);
-        }
-      },
-    });
+  function closeBody(v) {
+    if (v.frame) { v.frame.destroy(); v.frame = null; }
+    var card = cardOf(v);
+    if (card) card.querySelector('.nml-video-body-host').innerHTML = '';
   }
 
   // ------------------------------------------------------------------ события
@@ -179,13 +164,10 @@
     if (!card) return;
     var v = entryByPath(card.getAttribute('data-path'));
     if (!v) return;
-    if (e.target.closest('[data-edit]')) { e.stopPropagation(); if (!e.target.closest('[data-edit]').disabled) openEditor(v); return; }
-    var link = e.target.closest('[data-open-variant]');
-    if (link) { e.preventDefault(); C.openFile(v.path, link.getAttribute('data-open-variant'), jsonsDir); return; }
     if (e.target.closest('[data-toggle]')) {
       v.open = !v.open;
       card.classList.toggle('open', v.open);
-      if (v.open) renderBody(v); else card.querySelector('.nml-video-body-host').innerHTML = '';
+      if (v.open) renderBody(v); else closeBody(v);
     }
   });
   document.querySelectorAll('[data-pick]').forEach(function (b) {
