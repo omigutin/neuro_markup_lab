@@ -232,10 +232,6 @@ details > summary.nml-side-h { cursor: pointer; }
 /* Кнопки панели — в правом нижнем углу карточки; одинаковой ширины */
 .nml-info-foot { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 12px; }
 .nml-info-foot .nml-btn { width: 160px; }
-.nml-icon-btn { flex: 0 0 auto; width: 24px; height: 22px; padding: 0; border: 1px solid var(--nml-border-strong); border-radius: 6px; background: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
-.nml-icon-btn svg { width: 13px; height: 13px; fill: none; stroke: #4b5563; stroke-width: 1.4; }
-.nml-icon-btn:hover { border-color: var(--nml-accent); }
-.nml-icon-btn:hover svg { stroke: var(--nml-accent); }
 .nml-btn-small { padding: 4px 9px; font-size: 12px; border-radius: 6px; }
 .nml-tag { font-size: 10px; font-weight: 600; border-radius: 8px; padding: 1px 7px; background: #fff4d6; color: var(--nml-warn); }
 .nml-tag-active { background: var(--nml-accent); color: #fff; }

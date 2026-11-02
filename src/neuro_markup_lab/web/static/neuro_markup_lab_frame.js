@@ -31,8 +31,6 @@ NML.frame = (function () {
   var GEOMETRY_KEYS = { points: 1, shape_type: 1 };
   // Знаков после запятой в координатах
   var COORD_DIGITS = 2;
-  var COPY_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/>'
-    + '<path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>';
   var FOLDER_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true">'
     + '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
   // Значение show, когда в фигуре его нет: фигура видна
@@ -179,8 +177,6 @@ NML.frame = (function () {
     function fileCard(variant) {
       var loc = state.entry[variant] || {};
       var active = variant === state.variant;
-      var copy = loc.exists
-        ? '<button type="button" class="nml-icon-btn" data-copy="' + esc(loc.path) + '" title="Копировать путь">' + COPY_ICON + '</button>' : '';
       var path = loc.exists
         ? '<a href="#" class="nml-link" data-open-variant="' + variant + '" title="Открыть в программе по умолчанию">' + esc(loc.path) + '</a>'
         : '<span class="muted">' + esc(loc.path ? 'нет файла ' + loc.name : (loc.reason || '—')) + '</span>';
@@ -192,7 +188,7 @@ NML.frame = (function () {
       return '<div class="nml-info-file nml-v-' + variant + (active ? ' active' : '') + (loc.exists ? '' : ' missing') + (selectable ? ' selectable' : '') + '"'
         + (selectable ? ' data-select-variant="' + variant + '" title="Показать эту разметку"' : '') + '>'
         + '<div class="nml-info-file-body">'
-        + '<div class="nml-info-file-head"><b>' + esc(C.VARIANT_LABELS[variant]) + '</b>' + copy
+        + '<div class="nml-info-file-head"><b>' + esc(C.VARIANT_LABELS[variant]) + '</b>'
         + (loc.manual ? '<span class="nml-tag">выбрана вручную</span>' : '') + auto
         + '</div>'
         + '<div class="nml-info-path">' + path + '</div></div>' + choose + '</div>';
@@ -355,13 +351,6 @@ NML.frame = (function () {
     function onClick(e) {
       var t = e.target;
       if (editBtn && t.closest('.nml-preview-edit')) { e.stopPropagation(); if (!editBtn.disabled) openEditor(); return; }
-      var copy = t.closest('[data-copy]');
-      if (copy) {
-        e.stopPropagation();
-        copyText(copy.getAttribute('data-copy')).then(function () { C.toast('Путь скопирован.'); })
-          .catch(function () { C.toast('Не удалось скопировать путь.', true); });
-        return;
-      }
       var link = t.closest('[data-open-variant]');
       if (link) { e.preventDefault(); e.stopPropagation(); C.openFile(o.video, link.getAttribute('data-open-variant'), jsonsDir, state.key); return; }
       if (t.closest('[data-choose-production]')) { e.stopPropagation(); chooseProduction(); return; }
