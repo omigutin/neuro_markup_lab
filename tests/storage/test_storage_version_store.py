@@ -65,6 +65,18 @@ def test_existing_file_saved_as_initial(store):
     assert store.load(1) == doc(7) and history.current == 2
 
 
+def test_crlf_working_file_matches_current(store):
+    store.save(doc(1), SaveMode.NEW_VERSION)
+    text = store.working_path.read_bytes()
+    assert b'\r\n' not in text
+    store.working_path.write_bytes(text.replace(b'\n', b'\r\n'))
+    assert store.working_matches_current()
+    store.save(doc(2), SaveMode.NEW_VERSION)
+    history = store.history()
+    assert [v.origin for v in history.versions] == [VersionOrigin.EDITOR, VersionOrigin.EDITOR]
+    assert store.working_matches_current(history) and history.current == 2
+
+
 def test_external_change_is_kept(store):
     store.save(doc(1), SaveMode.NEW_VERSION)
     store.working_path.write_text(json.dumps(doc(5)), encoding='utf-8')

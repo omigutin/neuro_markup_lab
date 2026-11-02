@@ -37,12 +37,15 @@ def dump_json_document(document: dict[str, JsonValue]) -> str:
 
 
 def write_json_text(path: Path, text: str) -> None:
-    """ Атомарно пишет текст в ``path``: сначала во временный файл, затем замена. """
+    """
+        Атомарно пишет текст в ``path``: сначала во временный файл, затем замена.
+        Переводы строк пишутся как есть (без замены на ``\\r\\n`` в Windows), чтобы файл совпадал с текстом.
+    """
     path = Path(path)
     tmp = path.with_name(path.name + _TMP_SUFFIX)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_text(text, encoding='utf-8')
+        tmp.write_bytes(text.encode('utf-8'))
         os.replace(tmp, path)
     except OSError as exc:
         raise MarkupError(f'Cannot write markup file {path}: {exc}') from exc
@@ -53,15 +56,20 @@ def write_json_document(path: Path, document: dict[str, JsonValue]) -> None:
     write_json_text(path, dump_json_document(document))
 
 
+def _content_hash(data: bytes) -> str:
+    # Переводы строк не влияют на хэш: git (autocrlf) и редакторы в Windows пишут тот же JSON с \r\n
+    return hashlib.sha256(data.replace(b'\r\n', b'\n')).hexdigest()
+
+
 def text_hash(text: str) -> str:
-    """ Хэш содержимого файла (SHA-256 байтов UTF-8). """
-    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+    """ Хэш содержимого (SHA-256 байтов UTF-8, переводы строк приводятся к ``\\n``). """
+    return _content_hash(text.encode('utf-8'))
 
 
 def file_hash(path: Path) -> str | None:
-    """ Хэш содержимого файла или ``None``, если файла нет. """
+    """ Хэш содержимого файла (как :func:`text_hash`) или ``None``, если файла нет. """
     try:
-        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        return _content_hash(Path(path).read_bytes())
     except FileNotFoundError:
         return None
     except OSError as exc:
