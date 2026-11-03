@@ -97,6 +97,11 @@ const frame = NML.frame.mount(document.getElementById("slot"), {
   jsonsDir: "D:/markup",         // каталог боевых JSON; нет — только «рядом с видео»
   productionKey: null,                 // боевая, выбранная вручную; нет — подбирается
   details: true,                       // панель справа: файлы разметки, выбор боевой вручную, сведения
+  variant: "sidecar",                  // что показать: "sidecar" | "production"; нет — выбирается само
+  version: 3,                          // версия рядом с видео для показа; нет — текущая
+  locked: false,                       // true — только этот вариант и версия, без переключения (просмотр)
+  editable: true,                      // карандаш редактора
+  onVariant: (variant) => {},          // сменился показываемый вариант
   onProductionKey: (key) => {},        // запомнить выбор вручную (страница редактора хранит его в браузере)
   onSaved: (variant, location) => {},
 });

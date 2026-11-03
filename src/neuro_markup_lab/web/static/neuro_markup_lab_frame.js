@@ -9,6 +9,9 @@
 //     jsonsDir: 'D:/markup',              // каталог боевых JSON; нет — только «рядом с видео»
 //     productionKey: 'line1_cam5',        // боевая, выбранная вручную; нет — подбирается
 //     variant: 'sidecar',                 // что показать; нет — «рядом с видео», если есть, иначе боевую
+//     version: 3,                         // версия разметки рядом с видео для показа; нет — текущая
+//     locked: true,                       // только этот вариант (и версия): переключатель, выбор версии
+//                                         // и выбор боевой отключены — например, для уже сделанного прогона
 //     entry: { sidecar, production },     // уже известные файлы разметки; нет — запрашиваются
 //     details: true,                      // панель справа от кадра
 //     editable: true,                     // карандаш редактора
@@ -79,7 +82,7 @@ NML.frame = (function () {
     var urls = Object.assign({}, DEFAULT_URLS, o.urls || {});
     var jsonsDir = o.jsonsDir || '';
     var state = { entry: o.entry || null, variant: o.variant || null, key: o.productionKey || null,
-                  version: null, versions: null, cache: {}, doc: null, error: '', seq: 0, alive: true };
+                  version: o.version != null ? o.version : null, versions: null, cache: {}, doc: null, error: '', seq: 0, alive: true };
 
     host.classList.add('nml-frame');
     host.innerHTML = '<div class="nml-frame-view"><div class="nml-preview">'
@@ -104,7 +107,8 @@ NML.frame = (function () {
       return C.getJson(urls.locations, query(extra)).then(function (d) {
         state.entry = { sidecar: d.sidecar, production: d.production, factory: d.factory };
         state.cache = {};
-        if (!state.variant || !(state.entry[state.variant] || {}).exists) state.variant = defaultVariant(state.entry);
+        // Заданный вариант при locked не подменяется: показывается то, что передали, или ошибка
+        if (!state.variant || (!o.locked && !(state.entry[state.variant] || {}).exists)) state.variant = defaultVariant(state.entry);
         if (o.onEntry) o.onEntry(state.entry);
       });
     }
@@ -153,8 +157,8 @@ NML.frame = (function () {
     }
     function render() {
       if (!state.alive || !state.entry) return;
-      C.renderSwitch(switchHost, state.entry, state.variant, setVariant);
-      renderVersionSwitch();
+      if (o.locked) renderLockedSwitch();
+      else { C.renderSwitch(switchHost, state.entry, state.variant, setVariant); renderVersionSwitch(); }
       if (editBtn) {
         editBtn.disabled = !state.variant;
         editBtn.title = state.variant ? 'Редактировать разметку' : 'Нет ни JSON рядом с видео, ни боевого JSON';
@@ -185,16 +189,18 @@ NML.frame = (function () {
           + ' title="Открыть в программе по умолчанию">' + esc(shown.path) + '</a>'
         : '<span class="muted">' + esc(loc.path ? 'нет файла ' + loc.name : (loc.reason || '—')) + '</span>';
       var choose = '';
-      if (variant === 'production' && jsonsDir) {
+      if (o.locked) {
+        choose = '';
+      } else if (variant === 'production' && jsonsDir) {
         choose = '<button type="button" class="nml-info-open" data-choose-production title="Открыть другой файл боевой разметки для этого видео…">' + FOLDER_ICON + '</button>';
       } else if (variant === 'sidecar' && loc.exists) {
         choose = '<button type="button" class="nml-info-open" data-vsel data-vsel-toggle="card" title="' + esc(versionTitle()) + '">'
           + '<span class="nml-info-open-ver">' + versionLabel() + '</span>' + VERSIONS_ICON + '</button>'
           + (state.versionsOpen === 'card' ? versionsListHtml('card') : '');
       }
-      var auto = variant === 'production' && jsonsDir && loc.manual
+      var auto = variant === 'production' && jsonsDir && loc.manual && !o.locked
         ? '<button type="button" class="nml-btn nml-btn-small" data-auto-production title="Вернуть подбор по каталогу">Подбирать автоматически</button>' : '';
-      var selectable = loc.exists && !active;
+      var selectable = loc.exists && !active && !o.locked;
       return '<div class="nml-info-file nml-v-' + variant + (active ? ' active' : '') + (loc.exists ? '' : ' missing') + (selectable ? ' selectable' : '') + '"'
         + (selectable ? ' data-select-variant="' + variant + '" title="Показать эту разметку"' : '') + '>'
         + '<div class="nml-info-file-body">'
@@ -256,6 +262,15 @@ NML.frame = (function () {
       return '<div class="nml-vsel-list nml-vsel-' + where + '" data-vsel>' + rows + '</div>';
     }
     function sidecarShown() { return state.variant === 'sidecar' && (state.entry.sidecar || {}).exists; }
+    // locked: на кадре только показываемый вариант (и версия) — без переключения
+    function renderLockedSwitch() {
+      var v = state.variant;
+      if (!v) { switchHost.innerHTML = ''; return; }
+      var loc = state.entry[v] || {};
+      var ver = v === 'sidecar' ? (state.version != null ? 'v' + state.version : versionLabel()) : '';
+      switchHost.innerHTML = '<span class="nml-locked nml-v-' + v + '" title="' + esc(loc.path || loc.name || loc.reason || '') + '">'
+        + esc(C.VARIANT_LABELS[v]) + (ver ? ' · ' + esc(ver) : '') + '</span>';
+    }
     function renderVersionSwitch() {
       var old = box.querySelector('.nml-vsel-list');
       if (old) old.remove();
@@ -342,6 +357,7 @@ NML.frame = (function () {
 
     // ---- действия
     function setVariant(variant) {
+      if (o.locked) return;
       if (!state.entry || !(state.entry[variant] || {}).exists || variant === state.variant) return;
       state.variant = variant;
       if (o.onVariant) o.onVariant(variant);
@@ -394,6 +410,10 @@ NML.frame = (function () {
         var openVer = link.getAttribute('data-open-version');
         C.openFile(o.video, link.getAttribute('data-open-variant'), jsonsDir, state.key, openVer ? +openVer : null);
         return;
+      }
+      // locked: варианты, версии и боевая не меняются — остаются только ссылки и «Открыть видео»
+      if (o.locked && t.closest('[data-choose-production], [data-auto-production], [data-vsel-toggle], [data-version-pick], [data-select-variant]')) {
+        e.stopPropagation(); return;
       }
       if (t.closest('[data-choose-production]')) { e.stopPropagation(); chooseProduction(); return; }
       if (t.closest('[data-auto-production]')) { e.stopPropagation(); autoProduction(); return; }
